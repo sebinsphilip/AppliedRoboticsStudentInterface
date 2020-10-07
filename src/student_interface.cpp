@@ -3,14 +3,61 @@
 
 #include <stdexcept>
 #include <sstream>
+#include <experimental/filesystem>
+
 namespace student {
 
  void loadImage(cv::Mat& img_out, const std::string& config_folder){  
-   throw std::logic_error( "STUDENT FUNCTION - LOAD IMAGE - NOT IMPLEMENTED" );
+    //throw std::logic_error( "STUDENT FUNCTION - LOAD IMAGE - NOT LOADED" );
+    std::string filepath;
+    filepath.append (config_folder);
+    filepath.append ("/img.jpg");
+    std::cout << "The file path to open: " << filepath.c_str() << std::endl;
+    img_out = cv::imread(filepath.c_str(), cv::IMREAD_COLOR ); // Read the file
+    if( img_out.empty() ) // Check for invalid input
+    {
+	    std::cout << "Could not open or find the image" << std::endl ;
+    }
+
  }
 
  void genericImageListener(const cv::Mat& img_in, std::string topic, const std::string& config_folder){
-    throw std::logic_error( "STUDENT FUNCTION - IMAGE LISTENER - NOT CORRECTLY IMPLEMENTED" );
+    //throw std::logic_error( "STUDENT FUNCTION - IMAGE LISTENER - NOT CORRECTLY IMPLEMENTED" );
+    static bool firstEntry = true;
+    static std::string output_folder_path , output_folder_name;
+    static int id = 0;
+    if (firstEntry)
+    {
+    std::cout << "Enter output folder name (rewrites):";
+    std::cin >> output_folder_name;
+    output_folder_path.append (config_folder);
+    output_folder_path.append ("/");
+    output_folder_path.append (output_folder_name);
+    output_folder_path.append ("/");
+    std::stringstream folder_command;
+    folder_command << "mkdir -p " << output_folder_path;
+    std::cout << "output folder path to save:" << output_folder_path << std::endl;
+    std::system (folder_command.str().c_str());
+    firstEntry = false;
+    }
+    cv::imshow (topic, img_in);
+    char c;
+    c = cv::waitKey(30);
+    
+    std::stringstream img_file;
+    switch (c) {    	
+		case 's':		
+			img_file <<output_folder_path  << std::setfill('0') 
+					<< std::setw(3)  << (id++) << ".jpg";
+		 	cv::imwrite( img_file.str(), img_in );
+
+		 	std::cout << "Saved image " << img_file.str() << std::endl;
+		 	break;
+		default:
+				break;
+    }
+
+
   }
 
   bool extrinsicCalib(const cv::Mat& img_in, std::vector<cv::Point3f> object_points, const cv::Mat& camera_matrix, cv::Mat& rvec, cv::Mat& tvec, const std::string& config_folder){
