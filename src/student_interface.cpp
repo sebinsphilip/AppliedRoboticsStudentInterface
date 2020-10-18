@@ -8,6 +8,9 @@
 #include <unistd.h>
 
 #define MIN_AREA_SIZE 30
+#define FIND_ROBOT_DEBUG_PLOT 0
+#define FIND_OBSTRACLES_DEBUG_PLOT 0
+#define FIND_VICTIM_DEBUG_PLOT 0
 
 namespace student {
 
@@ -154,15 +157,142 @@ void unwarp(const cv::Mat& img_in, cv::Mat& img_out, const cv::Mat& transf,
     cv::warpPerspective(img_in, img_out, transf, img_in.size());
   }
 
+
+
+bool processObstacles(const cv::Mat& hsv_img, const double scale, std::vector<Polygon>& obstacle_list){
+
+    // Find red regions: h values around 0 (positive and negative angle: [0,15] U [160,179])
+    cv::Mat red_mask_low, red_mask_high, red_mask;
+    cv::inRange(hsv_img, cv::Scalar(0, 102, 86), cv::Scalar(40, 255, 255), red_mask_low);
+    cv::inRange(hsv_img, cv::Scalar(164, 102, 86), cv::Scalar(180, 255, 255), red_mask_high);
+    cv::addWeighted(red_mask_low, 1.0, red_mask_high, 1.0, 0.0, red_mask);
+
+    // Preparing the kernel matrix
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((2*2) + 1, (2*2)+1));
+
+    // Filter (applying an erosion and dilation) the image
+    cv::erode(red_mask, red_mask, kernel);
+    cv::dilate(red_mask, red_mask, kernel);
+
+
+    std::vector<std::vector<cv::Point>> contours, contours_approx;
+    std::vector<cv::Point> approx_curve;
+    cv::Mat contours_img;
+
+    // Process red mask
+    contours_img = hsv_img.clone();
+    cv::findContours(red_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    //drawContours(contours_img, contours, -1, cv::Scalar(40,190,40), 1, cv::LINE_AA);
+    //std::cout << "N. contours: " << contours.size() << std::endl;
+    for (int i=0; i<contours.size(); ++i)
+    {
+        //std::cout << (i+1) << ") Contour size: " << contours[i].size() << std::endl;
+        approxPolyDP(contours[i], approx_curve, 7, true);
+
+        Polygon scaled_contour;
+        for (const auto& pt: approx_curve) {
+            scaled_contour.emplace_back(pt.x/scale, pt.y/scale);
+        }
+        obstacle_list.push_back(scaled_contour);
+#if FIND_OBSTRACLES_DEBUG_PLOT
+        contours_approx = {approx_curve};
+        drawContours(contours_img, contours_approx, -1, cv::Scalar(0,170,220), 3, cv::LINE_AA);
+        std::cout << "   Approximated contour size: " << approx_curve.size() << std::endl;
+#endif
+    }
+#if FIND_OBSTRACLES_DEBUG_PLOT
+    std::cout << std::endl;
+    cv::imshow("Original", contours_img);
+    cv::imshow("red mask", red_mask);
+    cv::waitKey(0);
+#endif
+
+    return true;
+}
+
+bool processVictimsGate(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list, Polygon& gate){
+
+    // Find green regions
+    cv::Mat green_mask;
+    int appr_curve_size = 0;
+
+    cv::inRange(hsv_img, cv::Scalar(45, 50, 26), cv::Scalar(100, 255, 255), green_mask);
+
+    std::vector<std::vector<cv::Point>> contours, contours_approx;
+    std::vector<cv::Point> approx_curve;
+
+#if FIND_VICTIM_DEBUG_PLOT
+    cv::Mat contours_img;
+    contours_img = hsv_img.clone();
+#endif
+
+    cv::findContours(green_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    //drawContours(contours_img, contours, -1, cv::Scalar(40,190,40), 1, cv::LINE_AA);
+    //std::cout << "N. contours: " << contours.size() << std::endl;
+    int victim_id = 0;
+    for (int i=0; i<contours.size(); ++i)
+    {
+
+        const double area = cv::contourArea(contours[i]);
+
+        if(area < 500) continue;
+
+        //std::cout << (i+1) << ") Contour size: " << contours[i].size() << std::endl;
+        approxPolyDP(contours[i], approx_curve, 10, true);
+        appr_curve_size = approx_curve.size();
+        if(appr_curve_size < 4) continue;
+#if FIND_VICTIM_DEBUG_PLOT
+        contours_approx = {approx_curve};
+        drawContours(contours_img, contours_approx, -1, cv::Scalar(0,170,220), 3, cv::LINE_AA);
+        std::cout << "   Approximated contour size: " << approx_curve.size() << std::endl;
+#endif
+        if(appr_curve_size == 4)
+        {
+            //we found the rectangular gate
+            for (const auto& pt: approx_curve) {
+                gate.emplace_back(pt.x/scale, pt.y/scale);
+            }
+
+            continue;
+        }
+        // Here its definetly the circular victims
+
+        Polygon scaled_contour;
+        for (const auto& pt: approx_curve) {
+            scaled_contour.emplace_back(pt.x/scale, pt.y/scale);
+        }
+        victim_list.push_back({victim_id++, scaled_contour});
+    }
+#if FIND_VICTIM_DEBUG_PLOT
+    cv::imshow("Victims", contours_img);
+    cv::imshow("green mask", green_mask);
+    cv::waitKey(0);
+#endif
+
+    return true;
+}
+
+
 bool processMap(const cv::Mat& img_in, const double scale, std::vector<Polygon>& obstacle_list, std::vector<std::pair<int,Polygon>>& victim_list, Polygon& gate, const std::string& config_folder){
-	throw std::logic_error( "STUDENT FUNCTION - PROCESS MAP - NOT IMPLEMENTED" );
+    //throw std::logic_error( "STUDENT FUNCTION - PROCESS MAP - NOT IMPLEMENTED" );
+
+    // Convert color space from BGR to HSV
+    cv::Mat hsv_img;
+    cv::cvtColor(img_in, hsv_img, cv::COLOR_BGR2HSV);
+
+
+    const bool res1 = processObstacles(hsv_img, scale, obstacle_list);
+    if(!res1) std::cout << "processObstacles return false" << std::endl;
+    const bool res2 = processVictimsGate(hsv_img, scale, victim_list, gate);
+    if(!res2) std::cout << "processVictimsGate return false" << std::endl;
+    return res1 && res2;
+
 }
 
 bool findRobot(const cv::Mat& img_in, const double scale, Polygon& triangle, double& x, double& y, double& theta, const std::string& config_folder){
 	//throw std::logic_error( "STUDENT FUNCTION - FIND ROBOT - NOT IMPLEMENTED" );
 	// Convert color space from BGR to HSV
 	bool found = false;
-#define FIND_ROBOT_DEBUG_PLOT 1
 	cv::Mat hsv_img;
 	cv::cvtColor(img_in, hsv_img,
 			cv::COLOR_BGR2HSV);
@@ -210,16 +340,13 @@ bool findRobot(const cv::Mat& img_in, const double scale, Polygon& triangle, dou
 		double area = cv::contourArea(approx_curve);
 		if (area < MIN_AREA_SIZE) continue; // filter too small contours to remove false positives
 
-#if 0
-#ifdef FIND_ROBOT_DEBUG_PLOT   // do this only if FIND_DEBUG_PLOT is defined
+#if FIND_ROBOT_DEBUG_PLOT   // do this only if FIND_DEBUG_PLOT is defined
 		std::cout << (i+1) << ") Contour size: " << contours[i].size() << std::endl;
 		std::cout << (i+1) << ") Aprox Contour size: " << approx_curve.size() << std::endl;
 		std::cout << "Area: " << area << std::endl;
 
 		cv::drawContours(contours_img, approx_curve, -1, cv::Scalar(0,0,255), 3, cv::LINE_AA);
 #endif
-#endif
-
 		found = true;  // we found the blue triangle exit!
 		break;
 	}
