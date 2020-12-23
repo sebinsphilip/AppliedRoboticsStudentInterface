@@ -101,3 +101,12 @@ bool findRobot(const cv::Mat& img_in, const double scale, Polygon& triangle, dou
 ### Using template matching
 
 ### Tesseract-OCR
+
+# Add OMPL LIBRARY
+
+
+sudo apt-get install ros-kinetic-ompl
+
+# OMPL Tutorials
+
+https://ompl.kavrakilab.org/tutorials.html
