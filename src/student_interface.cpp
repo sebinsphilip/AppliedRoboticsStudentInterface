@@ -1,11 +1,14 @@
 #include "student_image_elab_interface.hpp"
 #include "student_planning_interface.hpp"
+#include "planning_ompl.hpp"
 
 #include <stdexcept>
 #include <sstream>
 #include <experimental/filesystem>
 #include <atomic>
 #include <unistd.h>
+#include <tesseract/baseapi.h>
+#include <leptonica/allheaders.h>
 
 //#include "ompl-1.5.1/src/ompl/geometric/planners/rrt/RRTstar.h"
 // include <ompl/geometric/planners/rrt/RRTstar.h>
@@ -14,8 +17,11 @@
 #define FIND_ROBOT_DEBUG_PLOT 0
 #define FIND_OBSTRACLES_DEBUG_PLOT 0
 #define FIND_VICTIM_DEBUG_PLOT 0
+#define FIND_VICTIM_OCR_DEBUG 0
+#define DEBUG 0
 
 // namespace om = ompl::geometric::RRTstar;
+
 
 namespace student {
 
@@ -253,19 +259,50 @@ namespace student {
     return true;
   }
 
+  /*Function to sort victim list based on recognised OCR index*/
+
+  bool sort_victim (const std::pair<int,Polygon> &a,
+                        const std::pair<int,Polygon> &b)
+  {
+          return (a.first < b.first);
+  }
+
   //-------------------------------------------------------------------------
   //          PROCESS VICTIMS GATE IMPLEMENTATION
   //-------------------------------------------------------------------------
 
   // Scan the map and find victims by their shape and color
 
-  bool processVictimsGate(const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list, Polygon& gate){
+  bool processVictimsGate(const cv::Mat& img_in, const cv::Mat& hsv_img, const double scale, std::vector<std::pair<int,Polygon>>& victim_list, Polygon& gate){
 
-    // Find green regions
     cv::Mat green_mask;
     int appr_curve_size = 0;
-
+    // Find green regions
     cv::inRange(hsv_img, cv::Scalar(45, 50, 26), cv::Scalar(100, 255, 255), green_mask);
+    // Apply some filtering
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((1*2) + 1, (1*2)+1));
+
+
+    //OCR specific filtering
+    cv::Mat green_mask_ocr;
+    cv::inRange(hsv_img, cv::Scalar(45, 30, 30), cv::Scalar(75, 255, 255), green_mask_ocr);
+    cv::dilate(green_mask_ocr, green_mask_ocr, kernel);
+    cv::erode(green_mask_ocr, green_mask_ocr, kernel);
+    cv::Mat green_mask_inv, filtered(img_in.rows, img_in.cols, CV_8UC3, cv::Scalar(255,255,255));
+    cv::bitwise_not(green_mask_ocr, green_mask_inv); // generate binary mask with inverted pixels w.r.t. green mask -> black numbers are part of this mask
+#if FIND_VICTIM_OCR_DEBUG
+    cv::imshow("Numbers", green_mask_inv);
+    cv::waitKey(0);
+#endif
+    // Create Tesseract object
+    tesseract::TessBaseAPI *ocr = new tesseract::TessBaseAPI();
+    // Initialize tesseract to use English (eng) 
+    ocr->Init(NULL, "eng");
+    // Set Page segmentation mode to PSM_SINGLE_CHAR (10)
+    ocr->SetPageSegMode(tesseract::PSM_SINGLE_CHAR);
+    // Only digits are valid output characters
+    ocr->SetVariable("tessedit_char_whitelist", "12345");
+    img_in.copyTo(filtered, green_mask_inv);   // create copy of image without green shapes
 
     std::vector<std::vector<cv::Point>> contours, contours_approx;
     std::vector<cv::Point> approx_curve;
@@ -307,16 +344,81 @@ namespace student {
         // Here its definetly the circular victims
 
         Polygon scaled_contour;
+        kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size((2*2) + 1, (2*2)+1));
+        cv::Rect boundRect = boundingRect(cv::Mat(approx_curve)); // find bounding box for each green blob
+        cv::Mat processROI(filtered, boundRect); // extract the ROI containing the digit
+
+        if (processROI.empty()) continue;
+
+        cv::resize(processROI, processROI, cv::Size(200, 200)); // resize the ROI
+        cv::threshold( processROI, processROI, 100, 255, 0 ); // threshold and binarize the image, to suppress some noise
+
+        // Apply some additional smoothing and filtering
+        cv::erode(processROI, processROI, kernel);
+        cv::GaussianBlur(processROI, processROI, cv::Size(5, 5), 2, 2);
+        cv::erode(processROI, processROI, kernel);
+
+#if FIND_VICTIM_OCR_DEBUG
+        // Show the actual image passed to the ocr engine
+        cv::imshow("ROI", processROI);
+        cv::waitKey(0);
+#endif
+
+        // Set image data
+        ocr->SetImage(processROI.data, processROI.cols, processROI.rows, 3, processROI.step);
+        int num = -1, max_conf=0, conf=0;
+        std::string num_string, num_string_confident;
+        cv::Mat processROI_temp(processROI);
+        cv::Mat processROI_prev(processROI);
+        for (int h = 0; h< 8; h++)
+        {
+            if (4 == h)
+            {
+                cv::flip(processROI, processROI_temp, 1);
+            }
+            if (0 != (h%4))
+            {
+                cv::rotate(processROI_prev, processROI_temp, (h-1)%4);
+            }
+            ocr->SetImage(processROI_temp.data, processROI_temp.cols, processROI_temp.rows, 3, processROI_temp.step);
+            num_string = std::string(ocr->GetUTF8Text());
+            conf = ocr->MeanTextConf();
+            if (max_conf < conf)
+            {
+                max_conf = conf;
+                num_string_confident = num_string;
+            }
+
+            processROI_prev = processROI_temp;
+#if FIND_VICTIM_OCR_DEBUG
+            std::cout << "Recognized digit: " << num_string<< "size" << num_string.size() << "comf:" << conf <<std::endl;
+            cv::imshow("ROI", processROI);
+            cv::waitKey(0);
+#endif
+        }
+        if (std::isdigit (num_string_confident[0]))
+        {
+            victim_id = atoi (num_string_confident.c_str());
+            std::cout << "VIctim id detected:" << victim_id <<std::endl;
+        }
+        else
+        {
+            std::cout << "Error in finding victim OCR!!" << std::endl;
+            continue;
+        }
         for (const auto& pt: approx_curve) {
             scaled_contour.emplace_back(pt.x/scale, pt.y/scale);
         }
-        victim_list.push_back({victim_id++, scaled_contour});
+        victim_list.push_back({victim_id, scaled_contour});
     }
-    #if FIND_VICTIM_DEBUG_PLOT
+    //close OCR
+    ocr->End();
+    sort(victim_list.begin(), victim_list.end(), sort_victim);
+#if FIND_VICTIM_DEBUG_PLOT
     cv::imshow("Victims", contours_img);
     cv::imshow("green mask", green_mask);
     cv::waitKey(0);
-    #endif
+#endif
 
     return true;
   }
@@ -338,7 +440,7 @@ namespace student {
     const bool res1 = processObstacles(hsv_img, scale, obstacle_list);
     if(!res1) std::cout << "processObstacles return false" << std::endl;
     // Process Victims-gate
-    const bool res2 = processVictimsGate(hsv_img, scale, victim_list, gate);
+    const bool res2 = processVictimsGate(img_in, hsv_img, scale, victim_list, gate);
     if(!res2) std::cout << "processVictimsGate return false" << std::endl;
     return res1 && res2;
 
@@ -356,6 +458,8 @@ namespace student {
   	// Convert color space from BGR to HSV
   	bool found = false;
   	cv::Mat hsv_img;
+
+
   	cv::cvtColor(img_in, hsv_img,
   			cv::COLOR_BGR2HSV);
 
@@ -476,25 +580,95 @@ namespace student {
 
   }
 
-  // //-------------------------------------------------------------------------
-  // //          PLAN PATH IMPLEMENTATION
-  // //-------------------------------------------------------------------------
-  //
-  // bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list,
-  //                const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate,
-  //                const float x, const float y, const float theta, Path& path,
-  //                const std::string& config_folder){
-  //
-  //   float xc = 0, yc = 1.5, r = 1.4;
-  //   float ds = 0.05;
-  //   for (float theta = -M_PI/2, s = 0; theta<(-M_PI/2 + 1.2); theta+=ds/r, s+=ds) {
-  //     path.points.emplace_back(s, xc+r*std::cos(theta), yc+r*std::sin(theta), theta+M_PI/2, 1./r);
-  //   }
-  //
-  //   // om::clear();
-  //
-  //   return true;
-  // }
+ //-------------------------------------------------------------------------
+ //          PLAN PATH IMPLEMENTATION
+ //-------------------------------------------------------------------------
+
+ bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list,
+                const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate,
+                const float x, const float y, const float theta, Path& path,
+                const std::string& config_folder){
+     float radius, gatex, gatey;
+     cv::Point2f circle;
+     std::vector<float> radius_list;
+     Polygon circle_list;
+#if DEBUG
+     std::cout << "x,y,theta:" << x << ", " << y << ", " << theta << std::endl;
+     for (int i=0; i<borders.size(); ++i)
+     {
+         std::cout << (i+1) << ") border: " << borders[i].x << "," << borders[i].y << std::endl;
+     }
+#endif
+     std::vector<cv::Point2f> gate_p(gate.size());
+     for (int i=0; i<gate.size(); i++)
+     {
+#if DEBUG
+         std::cout << (i+1) << ") gate: " << gate[i].x << "," << gate[i].y << std::endl;
+#endif
+         gate_p[i].x = gate[i].x;
+         gate_p[i].y = gate[i].y;
+     }
+     minEnclosingCircle (gate_p, circle, radius);
+#if DEBUG
+     std::cout << "gate_circle:" << circle.x << " " << circle.y << "radius:" << radius <<std::endl;
+#endif
+     gatex = circle.x; gatey = circle.y;
+
+     for (int i=0; i<obstacle_list.size(); ++i)
+
+     {
+         std::vector<cv::Point2f> obstacle_p(obstacle_list[i].size());
+#if DEBUG
+         std::cout << "-------------- OBSTRACLE LIST -------------------" << std::endl;
+#endif
+         for (int j=0; j<obstacle_list[i].size(); ++j)
+         {
+#if DEBUG
+             std::cout << (j+1) << ") poly: " << (obstacle_list[i])[j].x << "," << (obstacle_list[i])[j].y << std::endl;
+#endif
+             obstacle_p[j].x = (obstacle_list[i])[j].x;
+             obstacle_p[j].y = (obstacle_list[i])[j].y;
+         }
+         minEnclosingCircle (obstacle_p, circle, radius);
+#if DEBUG
+         std::cout  << circle.x << "," << circle.y << "radius:" << radius <<std::endl;
+#endif
+         Point temp(circle.x, circle.y);
+         circle_list.push_back(temp);
+         radius_list.push_back(radius);
+     }
+     float prev_goal_x  = x;
+     float prev_goal_y = y;
+     for (int i=0; i<victim_list.size(); ++i)
+
+     {
+         std::vector<cv::Point2f> victim_p(victim_list[i].second.size());
+         std::string path("/home/ubuntu/Desktop/path/");
+         std::string full_path = path;
+         full_path.append(std::to_string(victim_list[i].first));
+         full_path.append(".txt");
+
+#if DEBUG
+         std::cout << "-------------- VICTIM LIST-------------------:" << victim_list[i].first << "File path:"<<full_path <<std::endl;
+#endif
+         for (int j=0; j<victim_list[i].second.size(); ++j)
+         {
+             std::cout << (j+1) << ") poly: " << ((victim_list[i]).second)[j].x << "," << ((victim_list[i]).second)[j].y << std::endl;
+             victim_p[j].x = ((victim_list[i]).second)[j].x;
+             victim_p[j].y = ((victim_list[i]).second)[j].y;
+         }
+         minEnclosingCircle (victim_p, circle, radius);
+#if DEBUG
+         std::cout << "victim_circle:" << circle.x << " " << circle.y << "radius:" << radius <<std::endl;
+#endif
+         /* Plan motion from last victim/start point to next victim (local goal) */
+         plan (3, PLANNER_RRTSTAR, OBJECTIVE_PATHLENGTH, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
+         prev_goal_x = circle.x; prev_goal_y = circle.y;
+     }
+     /* Plan motion from last victim to goal*/
+     plan (3, PLANNER_RRTSTAR, OBJECTIVE_PATHLENGTH, "/home/ubuntu/Desktop/path/goal.txt", borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
+     return true;
+ }
 
 
 

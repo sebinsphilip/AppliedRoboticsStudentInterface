@@ -63,14 +63,14 @@ void processImage(const std::string& filename)
     boundRect[i] = boundingRect(cv::Mat(approx_curve)); // find bounding box for each green blob
   }
   cv::imshow("Original", contours_img);
-  cv::waitKey(0);
+  //cv::waitKey(0);
   
   
   cv::Mat green_mask_inv, filtered(img.rows, img.cols, CV_8UC3, cv::Scalar(255,255,255));
   cv::bitwise_not(green_mask, green_mask_inv); // generate binary mask with inverted pixels w.r.t. green mask -> black numbers are part of this mask
   
   cv::imshow("Numbers", green_mask_inv);
-  cv::waitKey(0);
+  //cv::waitKey(0);
 
   // Create Tesseract object
   tesseract::TessBaseAPI *ocr = new tesseract::TessBaseAPI();

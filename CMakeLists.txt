@@ -4,19 +4,6 @@ project(student_project)
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
 
-# find_package(catkin REQUIRED COMPONENTS
-#  base
-#  octomap_msgs
-#  pluginlib
-#  roscpp
-#  rospy
-#  std_msgs
-#  core_planning_utils
-#  core_planning_state_space
-#  core_map_representation_interface
-#
-# )
-
 find_package(OpenCV REQUIRED )
 find_package(project_interface REQUIRED )
 find_package(ompl REQUIRED)
@@ -37,13 +24,10 @@ include_directories(
  ${OpenCV_INCLUDE_DIRS}
  ${project_interface_INCLUDE_DIRS}
  ${OMPL_INCLUDE_DIRS}
+ src
  #${base_INCLUDE_DIRS}
 )
 
-
-# include_directories(ompl
-#   ompl-1.5.1
-# )
 
 ## CREATE EXECUTABLE LIBRARY
 add_executable(calibrate
@@ -58,33 +42,22 @@ add_executable(demo_ocr
    src/ocr.cpp
 )
 
-add_executable(ompl_test
-   src/planning_ompl.cpp
-)
 
 
 ## CREATE EXECUTABLE LIBRARY
 add_library(student SHARED
    src/student_interface.cpp
+   src/planning_ompl.cpp
 )
 
-# add_library(ompl
-#    ompl-1.5.1/src/ompl/geometric/planners/rrt/src/RRTstar.cpp
-# )
-
-# target_include_directories (ompl
-# 	PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
-# )
 
 target_link_libraries(student
   ${OpenCV_LIBRARIES}
   ${OMPL_LIBRARIES}
-)
-target_link_libraries(ompl_test
-  ${OMPL_LIBRARIES}
-	 ${Boost_LIBRARIES}
+  ${Boost_LIBRARIES}
+  tesseract
+  )
 
-)
 target_link_libraries(demo_match_template
   ${OpenCV_LIBRARIES}
 )

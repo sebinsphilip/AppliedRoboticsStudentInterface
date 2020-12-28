@@ -34,49 +34,7 @@
 
 /* Author: Luis G. Torres, Jonathan Gammell */
 
-#include <ompl/base/SpaceInformation.h>
-#include <ompl/base/objectives/PathLengthOptimizationObjective.h>
-#include <ompl/base/objectives/StateCostIntegralObjective.h>
-#include <ompl/base/objectives/MaximizeMinClearanceObjective.h>
-#include <ompl/base/spaces/RealVectorStateSpace.h>
-// For ompl::msg::setLogLevel
-#include "ompl/util/Console.h"
-
-// The supported optimal planners, in alphabetical order
-// #include <ompl/geometric/planners/informedtrees/AITstar.h>
-// #include <ompl/geometric/planners/informedtrees/BITstar.h>
-#include <ompl/geometric/planners/rrt/InformedRRTstar.h>
-#include <ompl/geometric/planners/rrt/RRTstar.h>
-
-
-// For boost program options
-#include <boost/program_options.hpp>
-// For string comparison (boost::iequals)
-#include <boost/algorithm/string.hpp>
-// For std::make_shared
-#include <memory>
-
-#include <fstream>
-
-
-namespace ob = ompl::base;
-namespace og = ompl::geometric;
-
-// An enum of supported optimal planners, alphabetical order
-enum optimalPlanner
-{
-    PLANNER_INF_RRTSTAR,
-    PLANNER_RRTSTAR,
-};
-
-// An enum of the supported optimization objectives, alphabetical order
-enum planningObjective
-{
-    OBJECTIVE_PATHCLEARANCE,
-    OBJECTIVE_PATHLENGTH,
-    OBJECTIVE_THRESHOLDPATHLENGTH,
-    OBJECTIVE_WEIGHTEDCOMBO
-};
+#include "planning_ompl.hpp"
 
 // Parse the command-line arguments
 bool argParse(int argc, char** argv, double *runTimePtr, optimalPlanner *plannerPtr, planningObjective *objectivePtr, std::string *outputFilePtr);
@@ -88,8 +46,10 @@ bool argParse(int argc, char** argv, double *runTimePtr, optimalPlanner *planner
 class ValidityChecker : public ob::StateValidityChecker
 {
 public:
-    ValidityChecker(const ob::SpaceInformationPtr& si) :
-        ob::StateValidityChecker(si) {}
+    Polygon circle;
+    std::vector<float> radius;
+    ValidityChecker(const ob::SpaceInformationPtr& si, Polygon circle, std::vector<float>radius) :
+        ob::StateValidityChecker(si) { this->circle = circle; this->radius = radius;}
 
     // Returns whether the given state's position overlaps the
     // circular obstacle
@@ -110,24 +70,24 @@ public:
         // Extract the robot's (x,y) position from its state
         double x = state2D->values[0];
         double y = state2D->values[1];
+        double dist = 0.0, min_dist = 100;
 
         // Distance formula between two points, offset by the circle's
         // radius
-        return sqrt((x-0.5)*(x-0.5) + (y-0.5)*(y-0.5)) - 0.25;
+        for (int i=0; i<circle.size();i++)
+        {
+            dist = sqrt((x-circle[i].x)*(x-circle[i].x) + (y-circle[i].y)*(y-circle[i].y)) - radius[i];
+            if (dist < 0)
+            {
+                return dist;
+            }
+            if (min_dist > dist)
+                min_dist = dist;
+        }
+        return min_dist;
+        
     }
 };
-
-ob::OptimizationObjectivePtr getPathLengthObjective(const ob::SpaceInformationPtr& si);
-
-ob::OptimizationObjectivePtr getThresholdPathLengthObj(const ob::SpaceInformationPtr& si);
-
-ob::OptimizationObjectivePtr getClearanceObjective(const ob::SpaceInformationPtr& si);
-
-ob::OptimizationObjectivePtr getBalancedObjective1(const ob::SpaceInformationPtr& si);
-
-ob::OptimizationObjectivePtr getBalancedObjective2(const ob::SpaceInformationPtr& si);
-
-ob::OptimizationObjectivePtr getPathLengthObjWithCostToGo(const ob::SpaceInformationPtr& si);
 
 ob::PlannerPtr allocatePlanner(ob::SpaceInformationPtr si, optimalPlanner plannerType)
 {
@@ -175,34 +135,56 @@ ob::OptimizationObjectivePtr allocateObjective(const ob::SpaceInformationPtr& si
     }
 }
 
-void plan(double runTime, optimalPlanner plannerType, planningObjective objectiveType, const std::string& outputFile)
+void plan(double runTime, optimalPlanner plannerType, planningObjective objectiveType, const std::string& outputFile,
+        const Polygon boarders, const float x, const float y, const float  gatex, const float gatey, const Polygon circle, const std::vector<float>radius)
 {
+    float minx = 100, miny= 100, maxx=-1, maxy=-1;
+    for (int i =0; i< boarders.size();i++)
+    {
+        /* Find lower bound of statespace from boarder*/
+        if (minx >= boarders[i].x)
+        {
+            minx = boarders[i].x;
+            if (miny >= boarders[i].y)
+                miny = boarders[i].y;
+        }
+        /* Find higher bound of statespace from boarder*/
+        if (maxx <= boarders[i].x)
+        {
+            maxx = boarders[i].x;
+            if (maxy <= boarders[i].y)
+                maxy = boarders[i].y;
+        }
+    }
+    std::cout << minx << "," <<miny << "," <<maxx << "," << maxy << std::endl;
     // Construct the robot state space in which we're planning. We're
     // planning in [0,1]x[0,1], a subset of R^2.
     auto space(std::make_shared<ob::RealVectorStateSpace>(2));
 
     // Set the bounds of space to be in [0,1].
-    space->setBounds(0.0, 1.0);
+    //space->setBounds(0.0, 1.0);
+    space->setBounds(0.0, std::max(maxx,maxy));
 
     // Construct a space information instance for this state space
     auto si(std::make_shared<ob::SpaceInformation>(space));
 
     // Set the object used to check which states in the space are valid
-    si->setStateValidityChecker(std::make_shared<ValidityChecker>(si));
+    si->setStateValidityChecker(std::make_shared<ValidityChecker>(si, circle, radius));
 
     si->setup();
+    std::cout << "goal x:" << gatex << " goal y:" << gatey << "start x:" <<x<<"start y:" <<y << std::endl;
 
     // Set our robot's starting state to be the bottom-left corner of
     // the environment, or (0,0).
     ob::ScopedState<> start(space);
-    start->as<ob::RealVectorStateSpace::StateType>()->values[0] = 0.0;
-    start->as<ob::RealVectorStateSpace::StateType>()->values[1] = 0.0;
+    start->as<ob::RealVectorStateSpace::StateType>()->values[0] = x;
+    start->as<ob::RealVectorStateSpace::StateType>()->values[1] = y;
 
     // Set our robot's goal state to be the top-right corner of the
     // environment, or (1,1).
     ob::ScopedState<> goal(space);
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = 1.0;
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = 1.0;
+    goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = gatex;
+    goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = gatey;
 
     // Create a problem instance
     auto pdef(std::make_shared<ob::ProblemDefinition>(si));
@@ -237,38 +219,25 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 
         // If a filename was specified, output the path as a matrix to
         // that file for visualization
+        std::string complete_path_file("/home/ubuntu/Desktop/path/path.txt");
         if (!outputFile.empty())
         {
             std::ofstream outFile(outputFile.c_str());
             std::static_pointer_cast<og::PathGeometric>(pdef->getSolutionPath())->
                 printAsMatrix(outFile);
             outFile.close();
+            std::ofstream outFilePath(complete_path_file.c_str(), std::ios::app);
+            std::ifstream inFile(outputFile.c_str());
+            outFilePath << inFile.rdbuf();
+            outFilePath.close();
+            inFile.close();
         }
+
     }
     else
         std::cout << "No solution found." << std::endl;
 }
 
-int main(int argc, char** argv)
-{
-    // The parsed arguments
-    double runTime;
-    optimalPlanner plannerType;
-    planningObjective objectiveType;
-    std::string outputFile;
-
-    // Parse the arguments, returns true if successful, false otherwise
-    if (argParse(argc, argv, &runTime, &plannerType, &objectiveType, &outputFile))
-    {
-        // Plan
-        plan(runTime, plannerType, objectiveType, outputFile);
-
-        // Return with success
-        return 0;
-    }
-    // Return with error
-    return -1;
-}
 
 ob::OptimizationObjectivePtr getPathLengthObjective(const ob::SpaceInformationPtr& si)
 {
