@@ -1,6 +1,8 @@
 #include "student_image_elab_interface.hpp"
 #include "student_planning_interface.hpp"
 #include "planning_ompl.hpp"
+#include "clipper.hpp"
+#include "dubinsMP.hpp"
 
 #include <stdexcept>
 #include <sstream>
@@ -18,12 +20,13 @@
 #define FIND_OBSTRACLES_DEBUG_PLOT 0
 #define FIND_VICTIM_DEBUG_PLOT 0
 #define FIND_VICTIM_OCR_DEBUG 0
-#define DEBUG 0
+#define DEBUG 1
 
 // namespace om = ompl::geometric::RRTstar;
 
 
 namespace student {
+
 
 //-------------------------------------------------------------------------
 //          LOAD IMAGE IMPLEMENTATION
@@ -523,14 +526,26 @@ namespace student {
   		// NB: the position of the robot coincide with the baricenter of the triangle
   		double cx = 0, cy = 0;
   		double tmp_cx = 0, tmp_cy = 0;
+                std::vector<cv::Point2f> triangle_p(3);
+                cv::Point2f robot_circle_temp;
+                float robot_radius_temp;
   		// emplace back every vertex on triangle (output of this function)
   		for (const auto& pt: approx_curve) {
   			tmp_cx = pt.x/scale; cx += tmp_cx;
   			tmp_cy = pt.y/scale; cy += tmp_cy;
   			triangle.emplace_back(tmp_cx, tmp_cy);
+                        triangle_p.emplace_back (tmp_cx, tmp_cy);
   			// remember to use the scale to convert the position on the image
   			// (pixels) to the position in the arena (meters)
   		}
+                // For plygon offsetting, find robot min. enclosing circle radius
+                cv::minEnclosingCircle (triangle_p, robot_circle_temp, robot_radius_temp);
+                //robot_radius_temp += (robot_radius_temp)/2;
+                std::ofstream outputFile("/tmp/robot_radius.txt");
+                outputFile << robot_radius_temp << " " << scale;
+                cv::imwrite("/tmp/map.jpg", img_in);
+                outputFile.close();
+                //std::cout <<"Robo-coordinates" <<robot_circle_temp.x << " " << robot_circle_temp.y << " " << robot_radius_temp << std::endl;
 
   		cx /= 3; // 'found' will be only true for a triangle, hence hardcoding 3
   		cy /= 3;
@@ -592,8 +607,17 @@ namespace student {
      cv::Point2f circle;
      std::vector<float> radius_list;
      Polygon circle_list;
+     DubinsPathType path_enum;
+     Pose p01(0,0, 0, 0,0), p11(0,0,0,0,0);
+     Pose p02(0,0, 0, 0,0), p12(0,0,0,0,0);
+     Pose p03(0,0, 0, 0,0), p13(0,0,0,0,0);
+     std::vector<Pose> vect_Pose_1({p01, p11});
+     std::vector<Pose> vect_Pose_2({p02, p12});
+     std::vector<Pose> vect_Pose_3({p03, p13});
+     Path pth1(vect_Pose_1), pth2(vect_Pose_2), pth3(vect_Pose_3);
+     float L;
 #if DEBUG
-     std::cout << "x,y,theta:" << x << ", " << y << ", " << theta << std::endl;
+     std::cout << "x,y,theta:" << x << ", " << y << ",theta: " << theta << std::endl;
      for (int i=0; i<borders.size(); ++i)
      {
          std::cout << (i+1) << ") border: " << borders[i].x << "," << borders[i].y << std::endl;
@@ -613,6 +637,24 @@ namespace student {
      std::cout << "gate_circle:" << circle.x << " " << circle.y << "radius:" << radius <<std::endl;
 #endif
      gatex = circle.x; gatey = circle.y;
+     //Read the robot radius
+     float robot_radius = 0.0;
+     double scale = 0.0;
+     cv::Mat map;
+     std::ifstream outputFile("/tmp/robot_radius.txt");
+     outputFile >> robot_radius >> scale;
+     outputFile.close();
+     map = cv::imread("/tmp/map.jpg", cv::IMREAD_COLOR ); // Read the file
+     if( map.empty() ) // Check for invalid input
+     {
+         std::cout << "Could not open or find the image" << std::endl ;
+     }
+     else
+     {
+     //cv::imshow("mapo", map);
+     //cv::waitKey(0);
+     }
+     std::cout << "Robot radius found:" << robot_radius << "scale:" << scale << std::endl;
 
      for (int i=0; i<obstacle_list.size(); ++i)
 
@@ -633,18 +675,26 @@ namespace student {
 #if DEBUG
          std::cout  << circle.x << "," << circle.y << "radius:" << radius <<std::endl;
 #endif
+         //radius += robot_radius;
+#if DEBUG
+         std::cout << "radius after ofsetting:" << radius << std::endl;
+#endif
          Point temp(circle.x, circle.y);
          circle_list.push_back(temp);
          radius_list.push_back(radius);
+         cv::circle(map, cv::Point(circle.x*scale, circle.y*scale), radius*scale, cv::Scalar(0,0,0));
      }
+     //cv::imshow("mapl", map);
+     //cv::waitKey(0);
      float prev_goal_x  = x;
      float prev_goal_y = y;
+     float theta_temp = theta;
      for (int i=0; i<victim_list.size(); ++i)
 
      {
          std::vector<cv::Point2f> victim_p(victim_list[i].second.size());
-         std::string path("/home/ubuntu/Desktop/path/");
-         std::string full_path = path;
+         std::string path_folder("/home/ubuntu/Desktop/path/");
+         std::string full_path = path_folder;
          full_path.append(std::to_string(victim_list[i].first));
          full_path.append(".txt");
 
@@ -662,11 +712,76 @@ namespace student {
          std::cout << "victim_circle:" << circle.x << " " << circle.y << "radius:" << radius <<std::endl;
 #endif
          /* Plan motion from last victim/start point to next victim (local goal) */
-         plan (3, PLANNER_RRTSTAR, OBJECTIVE_PATHLENGTH, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
+         plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
+         dubins (prev_goal_x, prev_goal_y, theta_temp,
+                 circle.x, circle.y,0,
+                 10, path_enum, pth1, pth2, pth3, L);
+         path.push_back(pth1.points[0]);
+         path.push_back(pth2.points[0]);
+         path.push_back(pth3.points[0]);
          prev_goal_x = circle.x; prev_goal_y = circle.y;
+         theta_temp = 0;
+#if DEBUG
+        std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
+            << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
+        std::cout << "i:[" << i << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
+            << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
+        std::cout << "i:[" << i << "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
+            << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
+#endif
+         std::ifstream planFile(full_path);
+         while (planFile.peek() != EOF)
+         {
+             float planx, plany, planx1, plany1;
+             planFile >> planx >> plany;
+             planFile >> planx1 >> plany1;
+             //std::cout << planx << " " << plany << std::endl;
+             //std::cout << planx1 << " " << plany1 << std::endl;
+             //dubins (planx, plany,0,
+             //        planx1, plany1, 0,
+             //        10, path_enum, pth1, pth2, pth3, L);
+             //path.push_back(pth1.points);
+             //path.push_back(pth2.points);
+             //path.push_back(pth3.points);
+             cv::line (map, cv::Point(planx*scale, plany*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+         }
+         planFile.close ();
      }
      /* Plan motion from last victim to goal*/
-     plan (3, PLANNER_RRTSTAR, OBJECTIVE_PATHLENGTH, "/home/ubuntu/Desktop/path/goal.txt", borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
+     plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, "/home/ubuntu/Desktop/path/goal.txt", borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
+     dubins (gatex, gatey,0,
+             prev_goal_x, prev_goal_y, 0,
+             10, path_enum, pth1, pth2, pth3, L);
+     path.push_back(pth1.points[0]);
+     path.push_back(pth2.points[0]);
+     path.push_back(pth3.points[0]);
+#if DEBUG
+        std::cout << "i:["  << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
+            << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
+        std::cout << "i:["  << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
+            << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
+        std::cout << "i:["<< "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
+            << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
+#endif
+     std::ifstream planFile("/home/ubuntu/Desktop/path/goal.txt");
+     while (planFile.peek() != EOF)
+     {
+         float planx, plany, planx1, plany1;
+         planFile >> planx >> plany;
+         planFile >> planx1 >> plany1;
+         //std::cout << planx << " " << plany << std::endl;
+         //std::cout << planx1 << " " << plany1 << std::endl;
+         //dubins (planx, plany,0,
+         //        planx1, plany1, 0,
+         //        10, path_enum, pth1, pth2, pth3, L);
+         //path.push_back(pth1.points);
+         //path.push_back(pth2.points);
+         //path.push_back(pth3.points);
+         cv::line (map, cv::Point(planx*scale, plany*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+     }
+     planFile.close ();
+     //cv::imshow("mapl", map);
+     //cv::waitKey(0);
      return true;
  }
 

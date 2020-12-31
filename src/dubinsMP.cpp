@@ -255,15 +255,21 @@ void dubins (float x0, float y0, float th0, float xf, float yf, float thf, int K
     }
 }
 
+/*
 
 int main ()
 {
     int Kmax = 10;
     DubinsPathType path;
     float L;
-    Pose p0(0,0.2, 0.2, 0,0), p1(0,0.9, 0.8, 0,0), p2(0,1.4, 0.2, 0,0), p3(0,0.75, 0.4, 0,0);
-    std::vector<Pose> vect_Pose({p0, p1, p2,p3});
-    Path init_path(vect_Pose); /*Modify init_path to add or remove intermediate points!*/
+    Pose p0(0,0.19955, 0.2288, -0.0359557,0),
+         p1(0,0.201489, 0.74864, 0,0),
+         p2(0,0.749913, 0.699552, 0,0),
+         p3(0,1.34764, 0.202089, 0,0),
+         p4(0,0.745812, 0.203129, 0,0),
+         p5(0,1.30065, 0.99255, 0,0);
+    std::vector<Pose> vect_Pose({p0, p1, p2,p3, p4, p5});
+    Path init_path(vect_Pose); //Modify init_path to add or remove intermediate points!
     Pose p01(0,0, 0, 0,0), p11(0,0,0,0,0);
     Pose p02(0,0, 0, 0,0), p12(0,0,0,0,0);
     Pose p03(0,0, 0, 0,0), p13(0,0,0,0,0);
@@ -291,3 +297,5 @@ int main ()
     return 0;
 
 }
+
+*/

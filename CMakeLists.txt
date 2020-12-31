@@ -50,12 +50,17 @@ add_library(student SHARED
    src/planning_ompl.cpp
 )
 
+add_library(dubins SHARED
+   src/dubinsMP.cpp
+)
 
 target_link_libraries(student
   ${OpenCV_LIBRARIES}
   ${OMPL_LIBRARIES}
   ${Boost_LIBRARIES}
   tesseract
+  ${CMAKE_SOURCE_DIR}/external_lib/libpolyclipping.so.22.0.0
+  ${CMAKE_SOURCE_DIR}/external_lib/libdubins.so
   )
 
 target_link_libraries(demo_match_template
