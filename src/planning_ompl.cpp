@@ -219,18 +219,20 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 
         // If a filename was specified, output the path as a matrix to
         // that file for visualization
-        std::string complete_path_file("/home/ubuntu/Desktop/path/path.txt");
+        //std::string complete_path_file("/home/ubuntu/Desktop/path/path.txt");
         if (!outputFile.empty())
         {
             std::ofstream outFile(outputFile.c_str());
             std::static_pointer_cast<og::PathGeometric>(pdef->getSolutionPath())->
                 printAsMatrix(outFile);
             outFile.close();
+            /*
             std::ofstream outFilePath(complete_path_file.c_str(), std::ios::app);
             std::ifstream inFile(outputFile.c_str());
             outFilePath << inFile.rdbuf();
             outFilePath.close();
             inFile.close();
+            */
         }
 
     }

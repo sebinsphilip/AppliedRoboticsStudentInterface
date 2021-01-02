@@ -60,7 +60,7 @@ target_link_libraries(student
   ${Boost_LIBRARIES}
   tesseract
   ${CMAKE_SOURCE_DIR}/external_lib/libpolyclipping.so.22.0.0
-  ${CMAKE_SOURCE_DIR}/external_lib/libdubins.so
+  ${CMAKE_SOURCE_DIR}/build/libdubins.so
   )
 
 target_link_libraries(demo_match_template

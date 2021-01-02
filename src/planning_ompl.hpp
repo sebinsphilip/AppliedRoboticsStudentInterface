@@ -21,6 +21,7 @@
 // For string comparison (boost::iequals)
 #include <boost/algorithm/string.hpp>
 // For std::make_shared
+#include <boost/filesystem.hpp>
 #include <memory>
 
 #include <fstream>
