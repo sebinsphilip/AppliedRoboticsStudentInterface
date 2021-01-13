@@ -20,9 +20,9 @@
 #define FIND_OBSTRACLES_DEBUG_PLOT 0
 #define FIND_VICTIM_DEBUG_PLOT 0
 #define FIND_VICTIM_OCR_DEBUG 0
-#define DEBUG 1
-#define DUBINS_SAMPLING_SIZE 100
-#define DUBINS_K_MAX 3
+#define DEBUG 0
+#define DUBINS_SAMPLING_SIZE 30
+#define DUBINS_K_MAX 10
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
@@ -598,21 +598,18 @@ namespace student {
 
   }
 
-  void drawDubinsCurve (const Path pth1, Path &path)
+  void drawDubinsCurve (const Path pth1, Path &path, float& theta_intermediate)
   {
-      if (0 != pth1.points[0].kappa)
+      for (int i = 0; i<= DUBINS_SAMPLING_SIZE; i++)
       {
-          for (int i = 0; i< DUBINS_SAMPLING_SIZE; i++)
-          {
-              Pose p;
-              float dubins_strip = pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
-              circline(dubins_strip, pth1.points[0].x, pth1.points[0].y, pth1.points[0].kappa, pth1.points[0].theta, p);
-              path.points.emplace_back (dubins_strip, p.x, p.y, p.theta,pth1.points[0].kappa);
-              //std::cout << pth1.points[0].s/100*i << " " << p.x << " " <<  p.y << " " <<  p.theta << " " << pth1.points[0].kappa << std::endl;
-          }
+          Pose p;
+          float dubins_strip = pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
+          circline(dubins_strip, pth1.points[0].x, pth1.points[0].y, pth1.points[0].kappa, pth1.points[0].theta, p);
+          path.points.emplace_back (dubins_strip, p.x, p.y, p.theta,pth1.points[0].kappa);
+          std::cout << p.x << " " << p.y << std::endl;
+          theta_intermediate = p.theta;
+          //std::cout << pth1.points[0].s/100*i << " " << p.x << " " <<  p.y << " " <<  p.theta << " " << pth1.points[0].kappa << std::endl;
       }
-      else
-          path.points.emplace_back (pth1.points[0].s, pth1.points[0].x, pth1.points[0].y, pth1.points[0].theta, pth1.points[0].kappa);
 
   }
 
@@ -710,6 +707,7 @@ namespace student {
      float prev_goal_x  = x;
      float prev_goal_y = y;
      float theta_temp = theta;
+     float theta_intermediate = 0;
      std::string full_path = RRT_STAR_FOLDER_PATH;
      boost::filesystem::path dir(RRT_STAR_FOLDER_PATH);
      boost::filesystem::remove_all(dir);
@@ -742,10 +740,11 @@ namespace student {
          dubins (prev_goal_x, prev_goal_y, theta_temp,
                  circle.x, circle.y,0,
                  DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
-         drawDubinsCurve (pth1, path);
-         drawDubinsCurve (pth2, path);
-         drawDubinsCurve (pth3, path);
+         drawDubinsCurve (pth1, path, theta_intermediate);
+         drawDubinsCurve (pth2, path, theta_intermediate);
+         drawDubinsCurve (pth3, path, theta_intermediate);
          prev_goal_x = circle.x; prev_goal_y = circle.y;
+         //theta_temp = theta_intermediate;
          theta_temp = 0;
 #if DEBUG
         std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
@@ -777,12 +776,13 @@ namespace student {
      full_path.append("goal.txt");
      /* Plan motion from last victim to goal*/
      plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
-     dubins (gatex, gatey,0,
-             prev_goal_x, prev_goal_y, 0,
+     //dubins (gatex, gatey, theta_intermediate,
+       dubins (prev_goal_x, prev_goal_y, 0,
+               gatex, gatey, 0,
              DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
-     drawDubinsCurve (pth1, path);
-     drawDubinsCurve (pth2, path);
-     drawDubinsCurve (pth3, path);
+     drawDubinsCurve (pth1, path, theta_intermediate);
+     drawDubinsCurve (pth2, path, theta_intermediate);
+     drawDubinsCurve (pth3, path, theta_intermediate);
 #if DEBUG
         std::cout << "i:["  << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
             << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
@@ -811,14 +811,6 @@ namespace student {
      //cv::imshow("mapl", map);
      //cv::waitKey(0);
 
-
-/*
-     float xc = 0, yc = 1.5, r = 1.4;
-     float ds = 0.05;
-     for (float theta = -M_PI/2, s = 0; theta<(-M_PI/2 + 1.2); theta+=ds/r, s+=ds) {
-         path.points.emplace_back(s, xc+r*std::cos(theta), yc+r*std::sin(theta), theta+M_PI/2, 1./r);    
-     }
-*/
 
      return true;
  }
