@@ -156,7 +156,9 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
                 maxy = boarders[i].y;
         }
     }
+#if DEBUG_RRT
     std::cout << minx << "," <<miny << "," <<maxx << "," << maxy << std::endl;
+#endif
     // Construct the robot state space in which we're planning. We're
     // planning in [0,1]x[0,1], a subset of R^2.
     auto space(std::make_shared<ob::RealVectorStateSpace>(2));
@@ -172,7 +174,9 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
     si->setStateValidityChecker(std::make_shared<ValidityChecker>(si, circle, radius));
 
     si->setup();
+#if DEBUG_RRT
     std::cout << "goal x:" << gatex << " goal y:" << gatey << "start x:" <<x<<"start y:" <<y << std::endl;
+#endif
 
     // Set our robot's starting state to be the bottom-left corner of
     // the environment, or (0,0).
@@ -209,6 +213,7 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 
     if (solved)
     {
+#if DEBUG_RRT
         // Output the length of the path found
         std::cout
             << optimizingPlanner->getName()
@@ -216,6 +221,7 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
             << pdef->getSolutionPath()->length()
             << " with an optimization objective value of "
             << pdef->getSolutionPath()->cost(pdef->getOptimizationObjective()) << std::endl;
+#endif
 
         // If a filename was specified, output the path as a matrix to
         // that file for visualization
@@ -237,7 +243,11 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 
     }
     else
+    {
+#if DEBUG_RRT
         std::cout << "No solution found." << std::endl;
+#endif
+    }
 }
 
 

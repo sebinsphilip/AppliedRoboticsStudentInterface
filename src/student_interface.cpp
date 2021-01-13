@@ -22,7 +22,7 @@
 #define FIND_VICTIM_OCR_DEBUG 0
 #define DEBUG 0
 #define DUBINS_SAMPLING_SIZE 30
-#define DUBINS_K_MAX 10
+#define DUBINS_K_MAX 15
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
@@ -606,7 +606,6 @@ namespace student {
           float dubins_strip = pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
           circline(dubins_strip, pth1.points[0].x, pth1.points[0].y, pth1.points[0].kappa, pth1.points[0].theta, p);
           path.points.emplace_back (dubins_strip, p.x, p.y, p.theta,pth1.points[0].kappa);
-          std::cout << p.x << " " << p.y << std::endl;
           theta_intermediate = p.theta;
           //std::cout << pth1.points[0].s/100*i << " " << p.x << " " <<  p.y << " " <<  p.theta << " " << pth1.points[0].kappa << std::endl;
       }
@@ -672,7 +671,9 @@ namespace student {
      //cv::imshow("mapo", map);
      //cv::waitKey(0);
      }
+#if DEBUG
      std::cout << "Robot radius found:" << robot_radius << "scale:" << scale << std::endl;
+#endif
 
      for (int i=0; i<obstacle_list.size(); ++i)
 
@@ -708,6 +709,7 @@ namespace student {
      float prev_goal_y = y;
      float theta_temp = theta;
      float theta_intermediate = 0;
+     int skip_index = 0, first_try = 1;
      std::string full_path = RRT_STAR_FOLDER_PATH;
      boost::filesystem::path dir(RRT_STAR_FOLDER_PATH);
      boost::filesystem::remove_all(dir);
@@ -727,7 +729,9 @@ namespace student {
 #endif
          for (int j=0; j<victim_list[i].second.size(); ++j)
          {
+#if DEBUG
              std::cout << (j+1) << ") poly: " << ((victim_list[i]).second)[j].x << "," << ((victim_list[i]).second)[j].y << std::endl;
+#endif
              victim_p[j].x = ((victim_list[i]).second)[j].x;
              victim_p[j].y = ((victim_list[i]).second)[j].y;
          }
@@ -737,29 +741,26 @@ namespace student {
 #endif
          /* Plan motion from last victim/start point to next victim (local goal) */
          plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
-         dubins (prev_goal_x, prev_goal_y, theta_temp,
-                 circle.x, circle.y,0,
-                 DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
-         drawDubinsCurve (pth1, path, theta_intermediate);
-         drawDubinsCurve (pth2, path, theta_intermediate);
-         drawDubinsCurve (pth3, path, theta_intermediate);
-         prev_goal_x = circle.x; prev_goal_y = circle.y;
-         //theta_temp = theta_intermediate;
-         theta_temp = 0;
-#if DEBUG
-        std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
-            << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
-        std::cout << "i:[" << i << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
-            << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
-        std::cout << "i:[" << i << "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
-            << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
-#endif
          std::ifstream planFile(full_path);
-         while (planFile.peek() != EOF)
+        skip_index = 0;
+        first_try = 1;
+        while (planFile.peek() != EOF)
          {
              float planx, plany, planx1, plany1;
-             planFile >> planx >> plany;
+             if (first_try)
+             {
+                 planFile >> planx >> plany;
+                 prev_goal_x = planx;
+                 prev_goal_y = plany;
+             }
              planFile >> planx1 >> plany1;
+             planFile >> planx1 >> plany1;
+             planFile >> planx1 >> plany1;
+             std::cout << prev_goal_x << " " << prev_goal_y << std::endl;
+             std::cout << planx1<< " " << plany1 << std::endl << std::endl;
+             //skip_index++;
+             //if (0 == skip_index%2)
+             //    continue;
              //std::cout << planx << " " << plany << std::endl;
              //std::cout << planx1 << " " << plany1 << std::endl;
              //dubins (planx, plany,0,
@@ -769,6 +770,24 @@ namespace student {
              //path.push_back(pth2.points);
              //path.push_back(pth3.points);
              cv::line (map, cv::Point(planx*scale, plany*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+             dubins (prev_goal_x, prev_goal_y, theta_temp,
+                     planx1, plany1,0,
+                     DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
+             drawDubinsCurve (pth1, path, theta_intermediate);
+             drawDubinsCurve (pth2, path, theta_intermediate);
+             drawDubinsCurve (pth3, path, theta_intermediate);
+             prev_goal_x = planx1; prev_goal_y = plany1;
+             //theta_temp = theta_intermediate;
+             theta_temp = 0;
+             first_try = 0;
+#if DEBUG
+             std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
+                 << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
+             std::cout << "i:[" << i << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
+                 << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
+             std::cout << "i:[" << i << "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
+                 << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
+#endif
          }
          planFile.close ();
      }
@@ -776,27 +795,24 @@ namespace student {
      full_path.append("goal.txt");
      /* Plan motion from last victim to goal*/
      plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
-     //dubins (gatex, gatey, theta_intermediate,
-       dubins (prev_goal_x, prev_goal_y, 0,
-               gatex, gatey, 0,
-             DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
-     drawDubinsCurve (pth1, path, theta_intermediate);
-     drawDubinsCurve (pth2, path, theta_intermediate);
-     drawDubinsCurve (pth3, path, theta_intermediate);
-#if DEBUG
-        std::cout << "i:["  << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
-            << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
-        std::cout << "i:["  << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
-            << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
-        std::cout << "i:["<< "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
-            << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
-#endif
      std::ifstream planFile("/home/ubuntu/Desktop/path/goal.txt");
+     skip_index = 0;
+     first_try = 1;
      while (planFile.peek() != EOF)
      {
          float planx, plany, planx1, plany1;
-         planFile >> planx >> plany;
+         if (first_try)
+         {
+             planFile >> planx >> plany;
+             prev_goal_x = planx;
+             prev_goal_y = plany;
+         }
          planFile >> planx1 >> plany1;
+         planFile >> planx1 >> plany1;
+         planFile >> planx1 >> plany1;
+         //skip_index++;
+         //if (0 == skip_index%2)
+         //    continue;
          //std::cout << planx << " " << plany << std::endl;
          //std::cout << planx1 << " " << plany1 << std::endl;
          //dubins (planx, plany,0,
@@ -806,6 +822,25 @@ namespace student {
          //path.push_back(pth2.points);
          //path.push_back(pth3.points);
          cv::line (map, cv::Point(planx*scale, plany*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+         //dubins (gatex, gatey, theta_intermediate,
+         std::cout << prev_goal_x << " " << prev_goal_y << std::endl;
+         std::cout << planx1<< " " << plany1 << std::endl << std::endl;
+         dubins (prev_goal_x, prev_goal_y, 0,
+                 planx1, plany1, 0,
+                 DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
+         drawDubinsCurve (pth1, path, theta_intermediate);
+         drawDubinsCurve (pth2, path, theta_intermediate);
+         drawDubinsCurve (pth3, path, theta_intermediate);
+         prev_goal_x = planx1; prev_goal_y = plany1;
+         first_try = 0;
+#if DEBUG
+         std::cout << "i:["  << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
+             << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
+         std::cout << "i:["  << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
+             << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
+         std::cout << "i:["<< "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
+             << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
+#endif
      }
      planFile.close ();
      //cv::imshow("mapl", map);

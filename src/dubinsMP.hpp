@@ -10,7 +10,7 @@
 #include "utils.hpp"
 
 #define _USE_MATH_DEFINES
-#define DUBIN_DEBUG 1
+#define DUBIN_DEBUG 0
 
 typedef enum
 {
