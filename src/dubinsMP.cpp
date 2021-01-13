@@ -209,6 +209,39 @@ void dubinscurve (float const x0, float const y0, float const th0, float const s
     L = pth1.points[0].s + pth2.points[0].s + pth3.points[0].s;
 }
 
+float calctheta (float const x1, float const y1, float const x2, float const y2)
+{
+    //If edge cases
+    float ang = 0;
+    if (x1 == x2 && y1 < y2){
+      ang = M_PI/2;
+    }
+    else if (y1 == y2 && x1 > x2){
+      ang = M_PI;
+    }
+    else if (x1 == x2 && y1 > y2){
+      ang = M_PI + (M_PI/2);
+    }
+
+    else {
+
+      ang = atan2(abs(y2-y1),abs(x2-x1));
+
+      if (x1 > x2 && y1 < y2){
+        ang = M_PI - ang;
+      }
+      else if (x1 > x2 && y1 > y2){
+        ang = M_PI + ang;
+      }
+      else if (x1 < x2 && y1 > y2){
+        ang = (2*M_PI) - ang;
+      }
+
+    }
+    return ang;
+
+}
+
 void dubins (float x0, float y0, float th0, float xf, float yf, float thf, int Kmax,
         DubinsPathType &path, Path &pth1, Path &pth2, Path &pth3, float &Ltotal)
 {

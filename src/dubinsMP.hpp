@@ -53,4 +53,5 @@ void dubinscurve (float const x0, float const y0, float const th0, float const s
 void dubins (float x0, float y0, float th0, float xf, float yf, float thf, int Kmax,
         DubinsPathType &path, Path &pth1, Path &pth2, Path &pth3, float &Ltotal);
 
+float calctheta (float const x1, float const y1, float const x2, float const y2);
 #endif
