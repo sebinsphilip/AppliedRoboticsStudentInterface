@@ -226,8 +226,6 @@ float calctheta (float const x1, float const y1, float const x2, float const y2)
     else {
 
       ang = atan2(fabs(y2-y1),fabs(x2-x1));
-      std::cout <<"ang:" << ang <<std::endl;
-
 
       if (x1 > x2 && y1 < y2){
         ang = M_PI - ang;

@@ -20,9 +20,10 @@
 #define FIND_OBSTRACLES_DEBUG_PLOT 0
 #define FIND_VICTIM_DEBUG_PLOT 0
 #define FIND_VICTIM_OCR_DEBUG 0
-#define DEBUG 0
+#define DEBUG 1
 #define DUBINS_SAMPLING_SIZE 20
 #define DUBINS_K_MAX 15
+#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.05
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
@@ -710,8 +711,11 @@ namespace student {
      float prev_goal_y = y;
      theta_temp = theta;
      float ang = 0;
-     float theta_intermediate = 0;
-     int skip_index = 0, first_try = 1;
+     float theta_intermediate = 0, delta_x =0, delta_y = 0;
+     int first_try = 1;
+     int rrt_point_array_limit = 50, rrt_point_index = 0, cur_index = 0, cur_index_skipped = 0;
+     float rrt_points[rrt_point_array_limit][2], rrt_points_filtered[rrt_point_array_limit][2],
+                rrt_points_filtered_skipped[rrt_point_array_limit][2];
      std::string full_path = RRT_STAR_FOLDER_PATH;
      boost::filesystem::path dir(RRT_STAR_FOLDER_PATH);
      boost::filesystem::remove_all(dir);
@@ -739,62 +743,145 @@ namespace student {
          }
          minEnclosingCircle (victim_p, circle, radius);
 #if DEBUG
-         std::cout << "victim_circle:" << circle.x << " " << circle.y << "radius:" << radius <<std::endl;
+         std::cout << "victim_circle: " << circle.x << " " << circle.y << " radius: " << radius <<std::endl;
 #endif
+         std::cout << "prev_goal_x: " << prev_goal_x << " " << prev_goal_y << std::endl;
          /* Plan motion from last victim/start point to next victim (local goal) */
          plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
          std::ifstream planFile(full_path);
-        skip_index = 0;
         first_try = 1;
+        float planx, plany, planx1, plany1;
+        for (int k=0; k<rrt_point_array_limit; k++)
+        {
+            rrt_points[k][0] = 0;
+            rrt_points[k][1] = 0;
+        }
+        rrt_point_index = 0;
+        if (planFile.is_open())
+        {
+            std::cout << "YEs opened!!";
+        }
+        else
+        {
+            std::cout << "Error in File!!!" << std::endl;
+        }
         while (planFile.peek() != EOF)
+        {
+            planFile >> planx1 >> plany1;
+            if (planx == planx1 && plany == plany1)
+            {
+                /* Reached EOF, break out of loop*/
+                planFile >> planx1 >> plany1;
+                continue;
+            }
+            rrt_points[rrt_point_index][0] = planx1;
+            rrt_points[rrt_point_index++][1] = plany1;
+            std::cout << "rrt_points: " << rrt_points[rrt_point_index-1][0] << " " << rrt_points[rrt_point_index-1][1] << std::endl;
+            planx = planx1; plany = plany1;
+        }
+        std::cout << "rrt_point_index: " << rrt_point_index << std::endl;
+        planFile.close ();
+        cur_index = 0;
+        cur_index_skipped = 0;
+        rrt_points_filtered[cur_index][0] = rrt_points[0][0];
+        rrt_points_filtered[cur_index][1] = rrt_points[0][1];
+#if 0
+        for (int p=0; p<rrt_point_index;)
+        {
+            if (p+3 < (rrt_point_index-3))
+            {
+DELTA:
+                delta_x = fabs(rrt_points_filtered[cur_index][0]-rrt_points[p+3][0]);
+                delta_y = fabs(rrt_points_filtered[cur_index][1]-rrt_points[p+3][1]);
+                float dist = sqrt(delta_x*delta_x + delta_y*delta_y) - MINIMUM_CURL_FREE_CIRCLE_RADIUS;
+                if (dist < 0)
+                {
+                    p++;
+                    goto DELTA;
+                }
+                else
+                {
+                    cur_index++;
+                    rrt_points_filtered[cur_index][0] = rrt_points[p+3][0];
+                    rrt_points_filtered[cur_index][1] = rrt_points[p+3][1];
+                }
+            }
+            else
+            {
+                //last point
+                cur_index++;
+                rrt_points_filtered[cur_index][0] = rrt_points[rrt_point_index-1][0];
+                rrt_points_filtered[cur_index][1] = rrt_points[rrt_point_index-1][1];
+                break;
+            }
+            p+=3;
+        }
+#endif
+        for (int p=1; p<rrt_point_index;p++)
+        {
+         delta_x = fabs(rrt_points_filtered[cur_index][0]-rrt_points[p][0]);
+         delta_y = fabs(rrt_points_filtered[cur_index][1]-rrt_points[p][1]);
+         float dist = sqrt(delta_x*delta_x + delta_y*delta_y) - MINIMUM_CURL_FREE_CIRCLE_RADIUS;
+         if (dist < 0)
          {
-             float planx, plany, planx1, plany1;
-             if (first_try)
+             if (p == rrt_point_index-1)
              {
-                 planFile >> planx >> plany;
-                 prev_goal_x = planx;
-                 prev_goal_y = plany;
+             rrt_points_filtered[cur_index][0] = rrt_points[p][0];
+             rrt_points_filtered[cur_index][1] = rrt_points[p][1];
+                 std::cout << "HEEEEEEEEEEEEEEEREEEEEEEEE: " << rrt_points_filtered[cur_index][0] << " " << cur_index << std::endl;
+             break;
+
              }
-             planFile >> planx1 >> plany1;
-             planFile >> planx1 >> plany1;
-             planFile >> planx1 >> plany1;
-             if (planx1 == prev_goal_x)
-                 break;
-             std::cout << prev_goal_x << " " << prev_goal_y << std::endl;
-             std::cout << planx1<< " " << plany1 << std::endl << std::endl;
-             //skip_index++;
-             //if (0 == skip_index%2)
-             //    continue;
-             //std::cout << planx << " " << plany << std::endl;
-             //std::cout << planx1 << " " << plany1 << std::endl;
-             //dubins (planx, plany,0,
-             //        planx1, plany1, 0,
-             //        10, path_enum, pth1, pth2, pth3, L);
-             //path.push_back(pth1.points);
-             //path.push_back(pth2.points);
-             //path.push_back(pth3.points);
-             cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
-             ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
-             //ang = atan2((plany1-circle.y),(planx1-circle.x));
-             dubins (prev_goal_x, prev_goal_y, theta_temp,
-                     planx1, plany1,ang,
-                     DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
-             drawDubinsCurve (pth1, path, theta_intermediate);
-             drawDubinsCurve (pth2, path, theta_intermediate);
-             drawDubinsCurve (pth3, path, theta_intermediate);
-             prev_goal_x = planx1; prev_goal_y = plany1;
+             continue;
+         }
+         else
+         {
+             cur_index++;
+             rrt_points_filtered[cur_index][0] = rrt_points[p][0];
+             rrt_points_filtered[cur_index][1] = rrt_points[p][1];
+         }
+        }
 
-             std::cout << "theta:[" << theta_temp <<  std::endl;
-             std::cout << "angle:[" << ang <<  std::endl;
-             std::cout << "circlex:[" << circle.x <<  std::endl;
-             std::cout << "circley:[" << circle.y <<  std::endl;
-             std::cout << "planx:[" << planx <<  std::endl;
-             std::cout << "plany:[" << plany <<  std::endl;
-
-             //theta_temp = theta_intermediate;
-             theta_temp = ang;
-             first_try = 0;
+        int lim = 0;
+        for (lim=0; lim<=cur_index;lim+=2)
+        {
+             rrt_points_filtered_skipped[cur_index_skipped][0] = rrt_points_filtered[lim][0];
+             rrt_points_filtered_skipped[cur_index_skipped++][1] = rrt_points_filtered[lim][1];
+        }
+        if (lim == cur_index+1)
+        {
+             rrt_points_filtered_skipped[cur_index_skipped][0] = rrt_points_filtered[cur_index][0];
+             rrt_points_filtered_skipped[cur_index_skipped++][1] = rrt_points_filtered[cur_index][1];
+        }
+        std::cout << "cur_index: " << cur_index << std::endl;
+        for (int p=0; p<=cur_index;p++)
+        {
+            std::cout << "Filtered points: " << rrt_points_filtered[p][0] << " " << rrt_points_filtered[p][1] << std::endl;
+        }
+        std::cout << "cur_index_skipped: " << cur_index_skipped << std::endl;
+        for (int p=0; p<cur_index_skipped;p++)
+        {
+            std::cout << "Filtered skipped points: " << rrt_points_filtered_skipped[p][0] << " " << rrt_points_filtered_skipped[p][1] << std::endl;
+        }
+        for (int p=1; p<cur_index_skipped;p++)
+        {
+            planx1 = rrt_points_filtered_skipped[p][0];
+            plany1 = rrt_points_filtered_skipped[p][1];
+            cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+            ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
+            dubins (prev_goal_x, prev_goal_y, theta_temp,
+                    planx1, plany1,ang,
+                    DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
+            drawDubinsCurve (pth1, path, theta_intermediate);
+            drawDubinsCurve (pth2, path, theta_intermediate);
+            drawDubinsCurve (pth3, path, theta_intermediate);
 #if DEBUG
+             std::cout << "prev_goal_x: " <<prev_goal_x << " prev_goal_y: " << prev_goal_y << std::endl;
+             std::cout << "planx1: " <<planx1<< " plany1: " << plany1 << std::endl;
+             std::cout << "DELTA_X: " <<fabs(planx1-prev_goal_x)<< " DELTA_Y: " << fabs(plany1-prev_goal_y) << std::endl;
+             std::cout << "theta_temp: " << theta_temp <<  std::endl;
+             std::cout << "ang: " << ang <<  std::endl;
+             std::cout << "circle.x: " << circle.x << " circle.y:" << circle.y <<  std::endl;
 
              std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
                  << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
@@ -802,68 +889,130 @@ namespace student {
                  << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
              std::cout << "i:[" << i << "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
                  << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
+         std::cout << std::endl << std::endl;
 #endif
-         }
-         planFile.close ();
+             /* Last calculated destination angle becomes initial angle of new curve*/
+             theta_temp = ang;
+             /* Connect previous point and next points */
+             prev_goal_x = planx1; prev_goal_y = plany1;
+        }
+
      }
      full_path = RRT_STAR_FOLDER_PATH;
      full_path.append("goal.txt");
+#if DEBUG
+         std::cout << "-------------- GOAL -------------------:"  << " File path: "<<full_path <<std::endl;
+#endif
      /* Plan motion from last victim to goal*/
      plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
      std::ifstream planFile(full_path);
-     skip_index = 0;
-     first_try = 1;
-     std::cout << "thetab4:[" << theta_temp <<  std::endl;
+     float planx, plany, planx1, plany1;
+     for (int k=0; k<rrt_point_array_limit; k++)
+     {
+         rrt_points[k][0] = 0;
+         rrt_points[k][1] = 0;
+     }
+     rrt_point_index = 0;
+     if (planFile.is_open())
+     {
+         std::cout << "YEs opened!!";
+     }
+     else
+     {
+         std::cout << "Error in File!!!" << std::endl;
+     }
      while (planFile.peek() != EOF)
      {
-         float planx, plany, planx1, plany1;
-         if (first_try)
+         planFile >> planx1 >> plany1;
+         if (planx == planx1 && plany == plany1)
          {
-             planFile >> planx >> plany;
-             prev_goal_x = planx;
-             prev_goal_y = plany;
+             /* Reached EOF, break out of loop*/
+             planFile >> planx1 >> plany1;
+             continue;
          }
-         planFile >> planx1 >> plany1;
-         planFile >> planx1 >> plany1;
-         planFile >> planx1 >> plany1;
-         if (planx1 == prev_goal_x)
-             break;
-         //skip_index++;
-         //if (0 == skip_index%2)
-         //    continue;
-         //std::cout << planx << " " << plany << std::endl;
-         //std::cout << planx1 << " " << plany1 << std::endl;
-         //dubins (planx, plany,0,
-         //        planx1, plany1, 0,
-         //        10, path_enum, pth1, pth2, pth3, L);
-         //path.push_back(pth1.points);
-         //path.push_back(pth2.points);
-         //path.push_back(pth3.points);
+         rrt_points[rrt_point_index][0] = planx1;
+         rrt_points[rrt_point_index++][1] = plany1;
+         std::cout << "rrt_points: " << rrt_points[rrt_point_index-1][0] << " " << rrt_points[rrt_point_index-1][1] << std::endl;
+         planx = planx1; plany = plany1;
+     }
+     std::cout << "rrt_point_index: " << rrt_point_index << std::endl;
+     planFile.close ();
+     cur_index = 0;
+     rrt_points_filtered[cur_index][0] = rrt_points[0][0];
+     rrt_points_filtered[cur_index][1] = rrt_points[0][1];
+
+     for (int p=0; p<rrt_point_index;)
+     {
+        if (p+3 < (rrt_point_index-3))
+        {
+            delta_x = fabs(rrt_points_filtered[cur_index][0]-rrt_points[p][0]);
+            delta_y = fabs(rrt_points_filtered[cur_index][1]-rrt_points[p][1]);
+            float dist = sqrt(delta_x*delta_x + delta_y*delta_y) - MINIMUM_CURL_FREE_CIRCLE_RADIUS;
+            if (dist < 0)
+            {
+                p++;
+                continue;
+            }
+            else
+            {
+                cur_index++;
+                rrt_points_filtered[cur_index][0] = rrt_points[p][0];
+                rrt_points_filtered[cur_index][1] = rrt_points[p][1];
+            }
+        }
+        else
+        {
+            //last point
+            cur_index++;
+            rrt_points_filtered[cur_index][0] = rrt_points[rrt_point_index-1][0];
+            rrt_points_filtered[cur_index][1] = rrt_points[rrt_point_index-1][1];
+            break;
+        }
+        p+=3;
+     }
+
+     for (int p=1; p<rrt_point_index;p++)
+     {
+     }
+     std::cout << "cur_index: " << cur_index << std::endl;
+     for (int p=0; p<=cur_index;p++)
+     {
+         std::cout << "Filtered points: " << rrt_points_filtered[p][0] << " " << rrt_points_filtered[p][1] << std::endl;
+     }
+     for (int p=0; p<cur_index;p++)
+     {
+         std::cout << "Filtered points: " << rrt_points_filtered[p][0] << " " << rrt_points_filtered[p][1] << std::endl;
+         planx1 = rrt_points_filtered[p+1][0];
+         plany1 = rrt_points_filtered[p+1][1];
          cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
-         //dubins (gatex, gatey, theta_intermediate,
-         std::cout << prev_goal_x << " " << prev_goal_y << std::endl;
-         std::cout << planx1<< " " << plany1 << std::endl << std::endl;
          ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
          dubins (prev_goal_x, prev_goal_y, theta_temp,
-                 planx1, plany1, ang,
+                 planx1, plany1,ang,
                  DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
          drawDubinsCurve (pth1, path, theta_intermediate);
          drawDubinsCurve (pth2, path, theta_intermediate);
          drawDubinsCurve (pth3, path, theta_intermediate);
-         prev_goal_x = planx1; prev_goal_y = plany1;
-         theta_temp = ang;
-         first_try = 0;
-         std::cout << "thetain:[" << theta_temp <<  std::endl;
 #if DEBUG
-         std::cout << "i:["  << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
+         std::cout << "prev_goal_x: " <<prev_goal_x << " prev_goal_y: " << prev_goal_y << std::endl;
+         std::cout << "planx1: " <<planx1<< " plany1: " << plany1 << std::endl;
+         std::cout << "DELTA_X: " <<fabs(planx1-prev_goal_x)<< " DELTA_Y: " << fabs(plany1-prev_goal_y) << std::endl;
+         std::cout << "theta_temp: " << theta_temp <<  std::endl;
+         std::cout << "ang: " << ang <<  std::endl;
+         std::cout << "circle.x: " << circle.x << " circle.y:" << circle.y <<  std::endl;
+
+         std::cout << " pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
              << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
-         std::cout << "i:["  << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
+         std::cout << " pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
              << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
-         std::cout << "i:["<< "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
+         std::cout << " pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
              << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
+         std::cout << std::endl << std::endl;
 #endif
+         /* Last calculated destination angle becomes initial angle of new curve*/
+         theta_temp = ang;
+         /* Connect previous point and next points */
+         prev_goal_x = planx1; prev_goal_y = plany1;
      }
-     planFile.close ();
      // cv::imshow("mapl", map);
      // cv::waitKey(0);
 
