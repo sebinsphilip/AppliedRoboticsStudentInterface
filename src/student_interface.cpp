@@ -771,8 +771,8 @@ namespace student {
              //path.push_back(pth1.points);
              //path.push_back(pth2.points);
              //path.push_back(pth3.points);
-             cv::line (map, cv::Point(planx*scale, plany*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
-             ang = calctheta (planx1, plany1, circle.x, circle.y);
+             cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+             ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
              //ang = atan2((plany1-circle.y),(planx1-circle.x));
              dubins (prev_goal_x, prev_goal_y, theta_temp,
                      planx1, plany1,ang,
@@ -781,14 +781,19 @@ namespace student {
              drawDubinsCurve (pth2, path, theta_intermediate);
              drawDubinsCurve (pth3, path, theta_intermediate);
              prev_goal_x = planx1; prev_goal_y = plany1;
-#if DEBUG
+
              std::cout << "theta:[" << theta_temp <<  std::endl;
-#endif
+             std::cout << "angle:[" << ang <<  std::endl;
+             std::cout << "circlex:[" << circle.x <<  std::endl;
+             std::cout << "circley:[" << circle.y <<  std::endl;
+             std::cout << "planx:[" << planx <<  std::endl;
+             std::cout << "plany:[" << plany <<  std::endl;
+
              //theta_temp = theta_intermediate;
              theta_temp = ang;
              first_try = 0;
 #if DEBUG
-             std::cout << "angle:[" << ang <<  std::endl;
+
              std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
                  << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
              std::cout << "i:[" << i << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
@@ -803,9 +808,10 @@ namespace student {
      full_path.append("goal.txt");
      /* Plan motion from last victim to goal*/
      plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
-     std::ifstream planFile("/home/ubuntu/Desktop/path/goal.txt");
+     std::ifstream planFile(full_path);
      skip_index = 0;
      first_try = 1;
+     std::cout << "thetab4:[" << theta_temp <<  std::endl;
      while (planFile.peek() != EOF)
      {
          float planx, plany, planx1, plany1;
@@ -829,18 +835,21 @@ namespace student {
          //path.push_back(pth1.points);
          //path.push_back(pth2.points);
          //path.push_back(pth3.points);
-         cv::line (map, cv::Point(planx*scale, plany*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
+         cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
          //dubins (gatex, gatey, theta_intermediate,
          std::cout << prev_goal_x << " " << prev_goal_y << std::endl;
          std::cout << planx1<< " " << plany1 << std::endl << std::endl;
+         ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
          dubins (prev_goal_x, prev_goal_y, theta_temp,
-                 planx1, plany1, M_PI/2,
+                 planx1, plany1, ang,
                  DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
          drawDubinsCurve (pth1, path, theta_intermediate);
          drawDubinsCurve (pth2, path, theta_intermediate);
          drawDubinsCurve (pth3, path, theta_intermediate);
          prev_goal_x = planx1; prev_goal_y = plany1;
+         theta_temp = ang;
          first_try = 0;
+         std::cout << "thetain:[" << theta_temp <<  std::endl;
 #if DEBUG
          std::cout << "i:["  << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
              << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
@@ -851,8 +860,8 @@ namespace student {
 #endif
      }
      planFile.close ();
-     //cv::imshow("mapl", map);
-     //cv::waitKey(0);
+     // cv::imshow("mapl", map);
+     // cv::waitKey(0);
 
 
      return true;
