@@ -622,6 +622,7 @@ namespace student {
                 const float x, const float y, const float theta, Path& path,
                 const std::string& config_folder){
      float radius, gatex, gatey;
+     std::vector<std::pair<int,Polygon>> victim_list_copy = victim_list;
      cv::Point2f circle;
      std::vector<float> radius_list;
      Polygon circle_list;
@@ -634,79 +635,9 @@ namespace student {
      std::vector<Pose> vect_Pose_3({p03, p13});
      Path pth1(vect_Pose_1), pth2(vect_Pose_2), pth3(vect_Pose_3);
      float L;
-#if DEBUG
-     std::cout << "x,y,theta:" << x << ", " << y << ",theta: " << theta << std::endl;
-     for (int i=0; i<borders.size(); ++i)
-     {
-         std::cout << (i+1) << ") border: " << borders[i].x << "," << borders[i].y << std::endl;
-     }
-#endif
-     std::vector<cv::Point2f> gate_p(gate.size());
-     for (int i=0; i<gate.size(); i++)
-     {
-#if DEBUG
-         std::cout << (i+1) << ") gate: " << gate[i].x << "," << gate[i].y << std::endl;
-#endif
-         gate_p[i].x = gate[i].x;
-         gate_p[i].y = gate[i].y;
-     }
-     minEnclosingCircle (gate_p, circle, radius);
-#if DEBUG
-     std::cout << "gate_circle:" << circle.x << " " << circle.y << "radius:" << radius <<std::endl;
-#endif
-     gatex = circle.x; gatey = circle.y;
-     //Read the robot radius
-     float robot_radius = 0.0;
      double scale = 0.0;
      cv::Mat map;
-     std::ifstream outputFile("/tmp/robot_radius.txt");
-     outputFile >> robot_radius >> scale;
-     outputFile.close();
-     map = cv::imread("/tmp/map.jpg", cv::IMREAD_COLOR ); // Read the file
-     if( map.empty() ) // Check for invalid input
-     {
-         std::cout << "Could not open or find the image" << std::endl ;
-     }
-     else
-     {
-     //cv::imshow("mapo", map);
-     //cv::waitKey(0);
-     }
-#if DEBUG
-     std::cout << "Robot radius found:" << robot_radius << "scale:" << scale << std::endl;
-#endif
-
      float theta_temp = 0;
-     for (int i=0; i<obstacle_list.size(); ++i)
-
-     {
-         std::vector<cv::Point2f> obstacle_p(obstacle_list[i].size());
-#if DEBUG
-         std::cout << "-------------- OBSTRACLE LIST -------------------" << std::endl;
-#endif
-         for (int j=0; j<obstacle_list[i].size(); ++j)
-         {
-#if DEBUG
-             std::cout << (j+1) << ") poly: " << (obstacle_list[i])[j].x << "," << (obstacle_list[i])[j].y << std::endl;
-#endif
-             obstacle_p[j].x = (obstacle_list[i])[j].x;
-             obstacle_p[j].y = (obstacle_list[i])[j].y;
-         }
-         minEnclosingCircle (obstacle_p, circle, radius);
-#if DEBUG
-         std::cout  << circle.x << "," << circle.y << "radius:" << radius <<std::endl;
-#endif
-         //radius += robot_radius;
-#if DEBUG
-         std::cout << "radius after ofsetting:" << radius << std::endl;
-#endif
-         Point temp(circle.x, circle.y);
-         circle_list.push_back(temp);
-         radius_list.push_back(radius);
-         cv::circle(map, cv::Point(circle.x*scale, circle.y*scale), radius*scale, cv::Scalar(0,0,0));
-     }
-     //cv::imshow("mapl", map);
-     //cv::waitKey(0);
      float prev_goal_x  = x;
      float prev_goal_y = y;
      theta_temp = theta;
@@ -716,46 +647,75 @@ namespace student {
      int rrt_point_array_limit = 50, rrt_point_index = 0, cur_index = 0, cur_index_skipped = 0;
      float rrt_points[rrt_point_array_limit][2], rrt_points_filtered[rrt_point_array_limit][2],
                 rrt_points_filtered_skipped[rrt_point_array_limit][2];
+     float planx, plany, planx1, plany1;
+     Polygon gate_point;
      std::string full_path = RRT_STAR_FOLDER_PATH;
      boost::filesystem::path dir(RRT_STAR_FOLDER_PATH);
+     /* Clean the output directoy to hold the output files from RRT module */
      boost::filesystem::remove_all(dir);
      if(!(boost::filesystem::exists(dir))){
          boost::filesystem::create_directory(dir);
      }
-     for (int i=0; i<victim_list.size(); ++i)
+
+
+     /* Find the min-enclosing circle for each obstacle to pass to the RRT module*/
+     for (int i=0; i<obstacle_list.size(); ++i)
+     {
+         std::vector<cv::Point2f> obstacle_p(obstacle_list[i].size());
+         for (int j=0; j<obstacle_list[i].size(); ++j)
+         {
+             obstacle_p[j].x = (obstacle_list[i])[j].x;
+             obstacle_p[j].y = (obstacle_list[i])[j].y;
+         }
+         minEnclosingCircle (obstacle_p, circle, radius);
+         //radius += robot_radius;
+         Point temp(circle.x, circle.y);
+         circle_list.push_back(temp);
+         radius_list.push_back(radius);
+     }
+
+
+     /* Find the center x,y coordinates of the gate polygon*/
+     std::vector<cv::Point2f> gate_p(gate.size());
+     for (int i=0; i<gate.size(); i++)
+     {
+         gate_p[i].x = gate[i].x;
+         gate_p[i].y = gate[i].y;
+     }
+     minEnclosingCircle (gate_p, circle, radius);
+     gatex = circle.x; gatey = circle.y;
+     gate_point.emplace_back(gatex, gatey);
+     victim_list_copy.push_back({10, gate_point});
+     sort(victim_list_copy.begin(), victim_list_copy.end(), sort_victim);
+
+
+     for (int i=0; i<victim_list_copy.size(); ++i)
 
      {
          full_path = RRT_STAR_FOLDER_PATH;
-         std::vector<cv::Point2f> victim_p(victim_list[i].second.size());
-         full_path.append(std::to_string(victim_list[i].first));
+         std::vector<cv::Point2f> victim_p(victim_list_copy[i].second.size());
+         full_path.append(std::to_string(victim_list_copy[i].first));
          full_path.append(".txt");
 
-#if DEBUG
-         std::cout << "-------------- VICTIM LIST-------------------:" << victim_list[i].first << "File path:"<<full_path <<std::endl;
-#endif
-         for (int j=0; j<victim_list[i].second.size(); ++j)
+         /*Find the victim circle x,y coordinates to pass as the goal of RRT path planning */
+         for (int j=0; j<victim_list_copy[i].second.size(); ++j)
          {
-#if DEBUG
-             std::cout << (j+1) << ") poly: " << ((victim_list[i]).second)[j].x << "," << ((victim_list[i]).second)[j].y << std::endl;
-#endif
-             victim_p[j].x = ((victim_list[i]).second)[j].x;
-             victim_p[j].y = ((victim_list[i]).second)[j].y;
+             victim_p[j].x = ((victim_list_copy[i]).second)[j].x;
+             victim_p[j].y = ((victim_list_copy[i]).second)[j].y;
          }
          minEnclosingCircle (victim_p, circle, radius);
-#if DEBUG
-         std::cout << "victim_circle: " << circle.x << " " << circle.y << " radius: " << radius <<std::endl;
-#endif
-         std::cout << "prev_goal_x: " << prev_goal_x << " " << prev_goal_y << std::endl;
+
          /* Plan motion from last victim/start point to next victim (local goal) */
          plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
          std::ifstream planFile(full_path);
-        first_try = 1;
-        float planx, plany, planx1, plany1;
-        for (int k=0; k<rrt_point_array_limit; k++)
-        {
-            rrt_points[k][0] = 0;
-            rrt_points[k][1] = 0;
-        }
+         /*
+         for (int k=0; k<rrt_point_array_limit; k++)
+                 {
+                     rrt_points[k][0] = 0;
+                     rrt_points[k][1] = 0;
+                 }*/
+        memset (rrt_points, 0, sizeof (rrt_points));
+
         rrt_point_index = 0;
         while (planFile.peek() != EOF)
         {
@@ -832,7 +792,6 @@ namespace student {
         {
             planx1 = rrt_points_filtered[p][0];
             plany1 = rrt_points_filtered[p][1];
-            cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
             ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
             dubins (prev_goal_x, prev_goal_y, theta_temp,
                     planx1, plany1,ang,
@@ -863,127 +822,6 @@ namespace student {
         }
 
      }
-     full_path = RRT_STAR_FOLDER_PATH;
-     full_path.append("goal.txt");
-#if DEBUG
-         std::cout << "-------------- GOAL -------------------:"  << " File path: "<<full_path <<std::endl;
-#endif
-     /* Plan motion from last victim to goal*/
-     plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, gatex, gatey, circle_list, radius_list );
-     std::ifstream planFile(full_path);
-     float planx, plany, planx1, plany1;
-     for (int k=0; k<rrt_point_array_limit; k++)
-     {
-         rrt_points[k][0] = 0;
-         rrt_points[k][1] = 0;
-     }
-     rrt_point_index = 0;
-     while (planFile.peek() != EOF)
-     {
-         planFile >> planx1 >> plany1;
-         if (planx == planx1 && plany == plany1)
-         {
-             /* Reached EOF, break out of loop*/
-             planFile >> planx1 >> plany1;
-             continue;
-         }
-         rrt_points[rrt_point_index][0] = planx1;
-         rrt_points[rrt_point_index++][1] = plany1;
-         std::cout << "rrt_points: " << rrt_points[rrt_point_index-1][0] << " " << rrt_points[rrt_point_index-1][1] << std::endl;
-         planx = planx1; plany = plany1;
-     }
-     std::cout << "rrt_point_index: " << rrt_point_index << std::endl;
-     planFile.close ();
-     cur_index = 0;
-     rrt_points_filtered[cur_index][0] = rrt_points[0][0];
-     rrt_points_filtered[cur_index][1] = rrt_points[0][1];
-
-             for (int p=1; p<rrt_point_index;p++)
-             {
-              delta_x = fabs(rrt_points_filtered[cur_index][0]-rrt_points[p][0]);
-              delta_y = fabs(rrt_points_filtered[cur_index][1]-rrt_points[p][1]);
-              float dist = sqrt(delta_x*delta_x + delta_y*delta_y) - MINIMUM_CURL_FREE_CIRCLE_RADIUS;
-              if (dist < 0)
-              {
-                  if (p == rrt_point_index-1)
-                  {
-                  rrt_points_filtered[cur_index][0] = rrt_points[p][0];
-                  rrt_points_filtered[cur_index][1] = rrt_points[p][1];
-                      std::cout << "HEEEEEEEEEEEEEEEREEEEEEEEE: " << rrt_points_filtered[cur_index][0] << " " << cur_index << std::endl;
-                  break;
-
-                  }
-                  continue;
-              }
-              else
-              {
-                  cur_index++;
-                  rrt_points_filtered[cur_index][0] = rrt_points[p][0];
-                  rrt_points_filtered[cur_index][1] = rrt_points[p][1];
-              }
-             }
-/*
-             int lim = 0;
-             for (lim=0; lim<=cur_index;lim+=2)
-             {
-                  rrt_points_filtered_skipped[cur_index_skipped][0] = rrt_points_filtered[lim][0];
-                  rrt_points_filtered_skipped[cur_index_skipped++][1] = rrt_points_filtered[lim][1];
-             }
-             if (lim == cur_index+1)
-             {
-                  rrt_points_filtered_skipped[cur_index_skipped][0] = rrt_points_filtered[cur_index][0];
-                  rrt_points_filtered_skipped[cur_index_skipped++][1] = rrt_points_filtered[cur_index][1];
-             }
-             std::cout << "cur_index_skipped: " << cur_index_skipped << std::endl;
-             for (int p=0; p<cur_index_skipped;p++)
-             {
-                 std::cout << "Filtered skipped points: " << rrt_points_filtered_skipped[p][0] << " " << rrt_points_filtered_skipped[p][1] << std::endl;
-             }
-             */
-             std::cout << "cur_index: " << cur_index << std::endl;
-             for (int p=0; p<=cur_index;p++)
-             {
-                 std::cout << "Filtered points: " << rrt_points_filtered[p][0] << " " << rrt_points_filtered[p][1] << std::endl;
-             }
-
-     for (int p=1; p<=cur_index;p++)
-     {
-
-         planx1 = rrt_points_filtered[p][0];
-         plany1 = rrt_points_filtered[p][1];
-         cv::line (map, cv::Point(prev_goal_x*scale, prev_goal_y*scale), cv::Point(planx1*scale, plany1*scale), cv::Scalar(0,0,0));
-         ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
-         dubins (prev_goal_x, prev_goal_y, theta_temp,
-                 planx1, plany1,ang,
-                 DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
-         drawDubinsCurve (pth1, path, theta_intermediate);
-         drawDubinsCurve (pth2, path, theta_intermediate);
-         drawDubinsCurve (pth3, path, theta_intermediate);
-#if DEBUG
-         std::cout << "prev_goal_x: " <<prev_goal_x << " prev_goal_y: " << prev_goal_y << std::endl;
-         std::cout << "planx1: " <<planx1<< " plany1: " << plany1 << std::endl;
-         std::cout << "DELTA_X: " <<fabs(planx1-prev_goal_x)<< " DELTA_Y: " << fabs(plany1-prev_goal_y) << std::endl;
-         std::cout << "theta_temp: " << theta_temp <<  std::endl;
-         std::cout << "ang: " << ang <<  std::endl;
-         std::cout << "circle.x: " << circle.x << " circle.y:" << circle.y <<  std::endl;
-
-         std::cout << " pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
-             << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
-         std::cout << " pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
-             << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
-         std::cout << " pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
-             << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
-         std::cout << std::endl << std::endl;
-#endif
-         /* Last calculated destination angle becomes initial angle of new curve*/
-         theta_temp = ang;
-         /* Connect previous point and next points */
-         prev_goal_x = planx1; prev_goal_y = plany1;
-     }
-     // cv::imshow("mapl", map);
-     // cv::waitKey(0);
-
-
      return true;
  }
 
