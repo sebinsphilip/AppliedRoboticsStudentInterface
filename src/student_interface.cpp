@@ -621,42 +621,46 @@ namespace student {
                 const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate,
                 const float x, const float y, const float theta, Path& path,
                 const std::string& config_folder){
+
      float radius, gatex, gatey;
      std::vector<std::pair<int,Polygon>> victim_list_copy = victim_list;
      cv::Point2f circle;
      std::vector<float> radius_list;
      Polygon circle_list;
      DubinsPathType path_enum;
+
      Pose p01(0,0, 0, 0,0), p11(0,0,0,0,0);
      Pose p02(0,0, 0, 0,0), p12(0,0,0,0,0);
      Pose p03(0,0, 0, 0,0), p13(0,0,0,0,0);
      std::vector<Pose> vect_Pose_1({p01, p11});
      std::vector<Pose> vect_Pose_2({p02, p12});
      std::vector<Pose> vect_Pose_3({p03, p13});
+
      Path pth1(vect_Pose_1), pth2(vect_Pose_2), pth3(vect_Pose_3);
-     float L;
-     double scale = 0.0;
-     cv::Mat map;
+
+     float curve_lenght;
      float theta_temp = 0;
      float prev_goal_x  = x;
      float prev_goal_y = y;
      theta_temp = theta;
      float ang = 0;
      float theta_intermediate = 0, delta_x =0, delta_y = 0;
-     int first_try = 1;
      int rrt_point_array_limit = 50, rrt_point_index = 0, cur_index = 0, cur_index_skipped = 0;
+
      float rrt_points[rrt_point_array_limit][2], rrt_points_filtered[rrt_point_array_limit][2],
                 rrt_points_filtered_skipped[rrt_point_array_limit][2];
+
      float planx, plany, planx1, plany1;
      Polygon gate_point;
+
      std::string full_path = RRT_STAR_FOLDER_PATH;
      boost::filesystem::path dir(RRT_STAR_FOLDER_PATH);
+
      /* Clean the output directoy to hold the output files from RRT module */
      boost::filesystem::remove_all(dir);
      if(!(boost::filesystem::exists(dir))){
          boost::filesystem::create_directory(dir);
      }
-
 
      /* Find the min-enclosing circle for each obstacle to pass to the RRT module*/
      for (int i=0; i<obstacle_list.size(); ++i)
@@ -668,7 +672,6 @@ namespace student {
              obstacle_p[j].y = (obstacle_list[i])[j].y;
          }
          minEnclosingCircle (obstacle_p, circle, radius);
-         //radius += robot_radius;
          Point temp(circle.x, circle.y);
          circle_list.push_back(temp);
          radius_list.push_back(radius);
@@ -684,13 +687,13 @@ namespace student {
      }
      minEnclosingCircle (gate_p, circle, radius);
      gatex = circle.x; gatey = circle.y;
+     /* Push gate valua as final victim */
      gate_point.emplace_back(gatex, gatey);
      victim_list_copy.push_back({10, gate_point});
      sort(victim_list_copy.begin(), victim_list_copy.end(), sort_victim);
 
-
+     /* Draw the dubins curve based on RRT path for the robot (for each victim pairs)*/
      for (int i=0; i<victim_list_copy.size(); ++i)
-
      {
          full_path = RRT_STAR_FOLDER_PATH;
          std::vector<cv::Point2f> victim_p(victim_list_copy[i].second.size());
@@ -708,15 +711,11 @@ namespace student {
          /* Plan motion from last victim/start point to next victim (local goal) */
          plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
          std::ifstream planFile(full_path);
-         /*
-         for (int k=0; k<rrt_point_array_limit; k++)
-                 {
-                     rrt_points[k][0] = 0;
-                     rrt_points[k][1] = 0;
-                 }*/
+         /* clear the array with 0*/
         memset (rrt_points, 0, sizeof (rrt_points));
 
         rrt_point_index = 0;
+        /* Read RRT generated path into the array rrt_points[] */
         while (planFile.peek() != EOF)
         {
             planFile >> planx1 >> plany1;
@@ -728,93 +727,60 @@ namespace student {
             }
             rrt_points[rrt_point_index][0] = planx1;
             rrt_points[rrt_point_index++][1] = plany1;
-            std::cout << "rrt_points: " << rrt_points[rrt_point_index-1][0] << " " << rrt_points[rrt_point_index-1][1] << std::endl;
             planx = planx1; plany = plany1;
         }
-        std::cout << "rrt_point_index: " << rrt_point_index << std::endl;
         planFile.close ();
+
         cur_index = 0;
         cur_index_skipped = 0;
+        /* The first point (victim) is always part of the path */
         rrt_points_filtered[cur_index][0] = rrt_points[0][0];
         rrt_points_filtered[cur_index][1] = rrt_points[0][1];
 
+        /* Calculate distance between current and next point and filter */
         for (int p=1; p<rrt_point_index;p++)
         {
          delta_x = fabs(rrt_points_filtered[cur_index][0]-rrt_points[p][0]);
          delta_y = fabs(rrt_points_filtered[cur_index][1]-rrt_points[p][1]);
+         /* dist is the threshold value which determines,if the point is a valid candiate to the path */
          float dist = sqrt(delta_x*delta_x + delta_y*delta_y) - MINIMUM_CURL_FREE_CIRCLE_RADIUS;
          if (dist < 0)
          {
              if (p == rrt_point_index-1)
              {
+               /* This the last point (victim point), so replace the current middle point with it and exit*/
              rrt_points_filtered[cur_index][0] = rrt_points[p][0];
              rrt_points_filtered[cur_index][1] = rrt_points[p][1];
-
              break;
-
              }
-             std::cout << "SKIPPPPPPPPPPPPPPPPPPPPPPPPPPPED: " << rrt_points_filtered[cur_index][0] << " " << cur_index << std::endl;
+             /* skip this point from the path and cintue taking the next available point*/
              continue;
          }
          else
          {
+           /* Add this point to the path */
              cur_index++;
              rrt_points_filtered[cur_index][0] = rrt_points[p][0];
              rrt_points_filtered[cur_index][1] = rrt_points[p][1];
          }
         }
-        /*
 
-        int lim = 0;
-        for (lim=0; lim<=cur_index;lim+=2)
-        {
-             rrt_points_filtered_skipped[cur_index_skipped][0] = rrt_points_filtered[lim][0];
-             rrt_points_filtered_skipped[cur_index_skipped++][1] = rrt_points_filtered[lim][1];
-        }
-        if (lim == cur_index+1)
-        {
-             rrt_points_filtered_skipped[cur_index_skipped][0] = rrt_points_filtered[cur_index][0];
-             rrt_points_filtered_skipped[cur_index_skipped++][1] = rrt_points_filtered[cur_index][1];
-        }
-        std::cout << "cur_index_skipped: " << cur_index_skipped << std::endl;
-        for (int p=0; p<cur_index_skipped;p++)
-        {
-            std::cout << "Filtered skipped points: " << rrt_points_filtered_skipped[p][0] << " " << rrt_points_filtered_skipped[p][1] << std::endl;
-        }
-        */
-        std::cout << "cur_index: " << cur_index << std::endl;
-        for (int p=0; p<=cur_index;p++)
-        {
-            std::cout << "Filtered points: " << rrt_points_filtered[p][0] << " " << rrt_points_filtered[p][1] << std::endl;
-        }
-
+        /* Calculate angle and call dubins function */
         for (int p=1; p<=cur_index;p++)
         {
             planx1 = rrt_points_filtered[p][0];
             plany1 = rrt_points_filtered[p][1];
+            /* Calculate destination angle for the dubins curve*/
             ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
+            /* Find the dubins way points*/
             dubins (prev_goal_x, prev_goal_y, theta_temp,
                     planx1, plany1,ang,
-                    DUBINS_K_MAX, path_enum, pth1, pth2, pth3, L);
+                    DUBINS_K_MAX, path_enum, pth1, pth2, pth3, curve_lenght);
+            /* draw the dubins curve from way points*/
             drawDubinsCurve (pth1, path, theta_intermediate);
             drawDubinsCurve (pth2, path, theta_intermediate);
             drawDubinsCurve (pth3, path, theta_intermediate);
-#if DEBUG
-             std::cout << "prev_goal_x: " <<prev_goal_x << " prev_goal_y: " << prev_goal_y << std::endl;
-             std::cout << "planx1: " <<planx1<< " plany1: " << plany1 << std::endl;
-             std::cout << "DELTA_X: " <<fabs(planx1-prev_goal_x)<< " DELTA_Y: " << fabs(plany1-prev_goal_y) << std::endl;
-             std::cout << "theta_temp: " << theta_temp <<  std::endl;
-             std::cout << "ang: " << ang <<  std::endl;
-             std::cout << "circle.x: " << circle.x << " circle.y:" << circle.y <<  std::endl;
 
-             std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
-                 << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
-             std::cout << "i:[" << i << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
-                 << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
-             std::cout << "i:[" << i << "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
-                 << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path_enum << std::endl;
-         std::cout << std::endl << std::endl;
-#endif
              /* Last calculated destination angle becomes initial angle of new curve*/
              theta_temp = ang;
              /* Connect previous point and next points */
@@ -824,7 +790,5 @@ namespace student {
      }
      return true;
  }
-
-
 
 }
