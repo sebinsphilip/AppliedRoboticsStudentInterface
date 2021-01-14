@@ -21,7 +21,7 @@
 #define FIND_VICTIM_DEBUG_PLOT 0
 #define FIND_VICTIM_OCR_DEBUG 0
 #define DEBUG 0
-#define DUBINS_SAMPLING_SIZE 30
+#define DUBINS_SAMPLING_SIZE 20
 #define DUBINS_K_MAX 15
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
@@ -758,6 +758,8 @@ namespace student {
              planFile >> planx1 >> plany1;
              planFile >> planx1 >> plany1;
              planFile >> planx1 >> plany1;
+             if (planx1 == prev_goal_x)
+                 break;
              std::cout << prev_goal_x << " " << prev_goal_y << std::endl;
              std::cout << planx1<< " " << plany1 << std::endl << std::endl;
              //skip_index++;
@@ -824,6 +826,8 @@ namespace student {
          planFile >> planx1 >> plany1;
          planFile >> planx1 >> plany1;
          planFile >> planx1 >> plany1;
+         if (planx1 == prev_goal_x)
+             break;
          //skip_index++;
          //if (0 == skip_index%2)
          //    continue;
