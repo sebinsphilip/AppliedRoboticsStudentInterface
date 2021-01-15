@@ -209,16 +209,19 @@ void dubinscurve (float const x0, float const y0, float const th0, float const s
     L = pth1.points[0].s + pth2.points[0].s + pth3.points[0].s;
 }
 
+/* Calculate the angle between two points from an absolute point */
 float calctheta (float const x1, float const y1, float const x2, float const y2)
 {
-    //If edge cases
     float ang = 0;
+    /* if in the + y axis*/
     if (x1 == x2 && y1 < y2){
       ang = M_PI/2;
     }
+    /* if in the - x axis*/
     else if (y1 == y2 && x1 > x2){
       ang = M_PI;
     }
+    /* if in the - y axis*/
     else if (x1 == x2 && y1 > y2){
       ang = M_PI + (M_PI/2);
     }
@@ -227,12 +230,15 @@ float calctheta (float const x1, float const y1, float const x2, float const y2)
 
       ang = atan2(fabs(y2-y1),fabs(x2-x1));
 
+      /* if in the north-west quater*/
       if (x1 > x2 && y1 < y2){
         ang = M_PI - ang;
       }
+      /* if in the south-west quater*/
       else if (x1 > x2 && y1 > y2){
         ang = M_PI + ang;
       }
+      /* if in the south-east quater*/
       else if (x1 < x2 && y1 > y2){
         ang = (2*M_PI) - ang;
       }
@@ -287,48 +293,3 @@ void dubins (float x0, float y0, float th0, float xf, float yf, float thf, int K
         //assert(check(sc_s1, ksigns(pidx,1)*sc_Kmax, sc_s2, ksigns(pidx,2)*sc_Kmax, sc_s3, ksigns(pidx,3)*sc_Kmax, sc_th0, sc_thf));
     }
 }
-
-/*
-
-int main ()
-{
-    int Kmax = 10;
-    DubinsPathType path;
-    float L;
-    Pose p0(0,0.19955, 0.2288, -0.0359557,0),
-         p1(0,0.201489, 0.74864, 0,0),
-         p2(0,0.749913, 0.699552, 0,0),
-         p3(0,1.34764, 0.202089, 0,0),
-         p4(0,0.745812, 0.203129, 0,0),
-         p5(0,1.30065, 0.99255, 0,0);
-    std::vector<Pose> vect_Pose({p0, p1, p2,p3, p4, p5});
-    Path init_path(vect_Pose); //Modify init_path to add or remove intermediate points!
-    Pose p01(0,0, 0, 0,0), p11(0,0,0,0,0);
-    Pose p02(0,0, 0, 0,0), p12(0,0,0,0,0);
-    Pose p03(0,0, 0, 0,0), p13(0,0,0,0,0);
-    std::vector<Pose> vect_Pose_1({p01, p11});
-    std::vector<Pose> vect_Pose_2({p02, p12});
-    std::vector<Pose> vect_Pose_3({p03, p13});
-    Path pth1(vect_Pose_1), pth2(vect_Pose_2), pth3(vect_Pose_3);
-
-    for (std::vector<Pose>::size_type i =0; i < init_path.size() - 1 ; i++)
-    {
-        dubins (init_path.points[i].x, init_path.points[i].y,init_path.points[i].theta,
-                init_path.points[i+1].x, init_path.points[i+1].y, init_path.points[i+1].theta,
-                Kmax, path, pth1, pth2, pth3, L);
-
-#if DUBIN_DEBUG
-        std::cout << "i:[" << i << "] pth1.points.x:" << pth1.points[0].x << " pth1.points.y:" << pth1.points[0].y << " pth1.points.theta:"
-            << pth1.points[0].theta << "pth1.points.s:" << pth1.points[0].s << "pth1.points.kappa:" << pth1.points[0].kappa << std::endl;
-        std::cout << "i:[" << i << "] pth2.points.x:" << pth2.points[0].x << " pth2.points.y:" << pth2.points[0].y << " pth2.points.theta:"
-            << pth2.points[0].theta << "pth2.points.s:" << pth2.points[0].s << "pth2.points.kappa:" << pth2.points[0].kappa << std::endl;
-        std::cout << "i:[" << i << "] pth3.points.x:" << pth3.points[0].x << " pth3.points.y:" << pth3.points[0].y << " pth3.points.theta:"
-            << pth3.points[0].theta << "pth3.points.s:" << pth3.points[0].s << "pth3.points.kappa:" << pth3.points[0].kappa << " L:" << L<< "path:" <<path << std::endl;
-#endif
-
-    }
-    return 0;
-
-}
-
-*/

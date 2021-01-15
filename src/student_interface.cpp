@@ -785,24 +785,6 @@ namespace student {
              rrt_points_merged[rrt_point_merged_index][1] = rrt_points[p][1];
          }
         }
-
-        for (int i = 0; i<= rrt_point_index; i++)
-        {
-          std::cout << " rrt_points: " << rrt_points[i][0]
-          << " " << rrt_points[i][1] << std::endl;
-        }
-        for (int i = 0; i<= cur_index; i++)
-        {
-          std::cout << " rrt_points_filtered: " << rrt_points_filtered[i][0]
-          << " " << rrt_points_filtered[i][1] << std::endl;
-        }
-
-        std::cout << "rrt_point_merged_index:" << rrt_point_merged_index << std::endl;
-        for (int i = 0; i<= rrt_point_merged_index; i++)
-        {
-          std::cout << " points: " << rrt_points_merged[i][0]
-          << " " << rrt_points_merged[i][1] << std::endl;
-        }
         prev_goal_x = rrt_points_merged[rrt_point_merged_index][0];
         prev_goal_y = rrt_points_merged[rrt_point_merged_index][1];
      }
@@ -811,20 +793,17 @@ namespace student {
 
      for (int p = 0; p < rrt_point_merged_index; p++)
      {
-
        prev_goal_x = rrt_points_merged[p][0];
        prev_goal_y = rrt_points_merged[p][1];
        next_goal_x = rrt_points_merged[p+1][0];
        next_goal_y = rrt_points_merged[p+1][1];
-       // next_next_goal_x = rrt_points_merged[p+2][0];
-       // next_next_goal_y = rrt_points_merged[p+2][1];
-       // // ang = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
-       // ang = calctheta (next_goal_x, next_goal_y, next_next_goal_x, next_next_goal_y);
 
+       /* If dealing with first or last angle */
       if ((1 == rrt_point_merged_index - p) || 0 == p)
        {
          ang = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
        }
+       /* If dealing with all the other angles */
        else
        {
          next_next_goal_x = rrt_points_merged[p+2][0];
@@ -843,9 +822,6 @@ namespace student {
          }
 
        }
-
-         std::cout << " ang " << ang << "ang1" << ang1 << " ang2 " << ang2 << std::endl;
-         //ang = (ang1 + ang2)/2;
          /* Find the dubins way points*/
          dubins (prev_goal_x, prev_goal_y, theta_temp,
                  next_goal_x, next_goal_y, ang,
@@ -854,13 +830,8 @@ namespace student {
          drawDubinsCurve (pth1, path, theta_intermediate);
          drawDubinsCurve (pth2, path, theta_intermediate);
          drawDubinsCurve (pth3, path, theta_intermediate);
-
           /* Last calculated destination angle becomes initial angle of new curve*/
           theta_temp = ang;
-     }
-     for (int i = 0; i<= path.points.size(); i++)
-     {
-       std::cout << " path.points:[ " << i << "]" << path.points[i].x << " " << path.points[i].y << std::endl;
      }
      return true;
  }
