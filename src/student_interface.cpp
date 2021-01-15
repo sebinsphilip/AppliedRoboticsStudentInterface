@@ -642,13 +642,17 @@ namespace student {
      float theta_temp = 0;
      float prev_goal_x  = x;
      float prev_goal_y = y;
+     float next_goal_x = 0;
+     float next_goal_y = 0;
      theta_temp = theta;
      float ang = 0;
      float theta_intermediate = 0, delta_x =0, delta_y = 0;
-     int rrt_point_array_limit = 50, rrt_point_index = 0, cur_index = 0, cur_index_skipped = 0;
+     int rrt_point_array_limit = 50, rrt_point_index = 0, rrt_point_merged_index = 0,
+         cur_index = 0, cur_index_skipped = 0;
 
      float rrt_points[rrt_point_array_limit][2], rrt_points_filtered[rrt_point_array_limit][2],
-                rrt_points_filtered_skipped[rrt_point_array_limit][2];
+                rrt_points_filtered_skipped[rrt_point_array_limit][2],
+                rrt_points_merged[rrt_point_array_limit*(victim_list.size()+1)][2];
 
      float planx, plany, planx1, plany1;
      Polygon gate_point;
@@ -712,7 +716,11 @@ namespace student {
          plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
          std::ifstream planFile(full_path);
          /* clear the array with 0*/
-        memset (rrt_points, 0, sizeof (rrt_points));
+         for (int k=0; k<rrt_point_array_limit; k++)
+         {
+             rrt_points[k][0] = 0;
+             rrt_points[k][1] = 0;
+         }
 
         rrt_point_index = 0;
         /* Read RRT generated path into the array rrt_points[] */
@@ -729,6 +737,7 @@ namespace student {
             rrt_points[rrt_point_index++][1] = plany1;
             planx = planx1; plany = plany1;
         }
+        planx = plany = 0;
         planFile.close ();
 
         cur_index = 0;
@@ -736,6 +745,8 @@ namespace student {
         /* The first point (victim) is always part of the path */
         rrt_points_filtered[cur_index][0] = rrt_points[0][0];
         rrt_points_filtered[cur_index][1] = rrt_points[0][1];
+        rrt_points_merged[rrt_point_merged_index][0] = rrt_points[0][0];
+        rrt_points_merged[rrt_point_merged_index][1] = rrt_points[0][1];
 
         /* Calculate distance between current and next point and filter */
         for (int p=1; p<rrt_point_index;p++)
@@ -751,6 +762,8 @@ namespace student {
                /* This the last point (victim point), so replace the current middle point with it and exit*/
              rrt_points_filtered[cur_index][0] = rrt_points[p][0];
              rrt_points_filtered[cur_index][1] = rrt_points[p][1];
+             rrt_points_merged[rrt_point_merged_index][0] = rrt_points[p][0];
+             rrt_points_merged[rrt_point_merged_index][1] = rrt_points[p][1];
              break;
              }
              /* skip this point from the path and cintue taking the next available point*/
@@ -760,10 +773,25 @@ namespace student {
          {
            /* Add this point to the path */
              cur_index++;
+             rrt_point_merged_index++;
              rrt_points_filtered[cur_index][0] = rrt_points[p][0];
              rrt_points_filtered[cur_index][1] = rrt_points[p][1];
+             rrt_points_merged[rrt_point_merged_index][0] = rrt_points[p][0];
+             rrt_points_merged[rrt_point_merged_index][1] = rrt_points[p][1];
          }
         }
+
+        for (int i = 0; i<= rrt_point_index; i++)
+        {
+          std::cout << " rrt_points: " << rrt_points[i][0]
+          << " " << rrt_points[i][1] << std::endl;
+        }
+        for (int i = 0; i<= cur_index; i++)
+        {
+          std::cout << " rrt_points_filtered: " << rrt_points_filtered[i][0]
+          << " " << rrt_points_filtered[i][1] << std::endl;
+        }
+
 
         /* Calculate angle and call dubins function */
         for (int p=1; p<=cur_index;p++)
@@ -772,6 +800,8 @@ namespace student {
             plany1 = rrt_points_filtered[p][1];
             /* Calculate destination angle for the dubins curve*/
             ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
+            //ang2 = calctheta (planx1, plany1, next_goal_x, next_goal_y);
+            //ang = (ang1 + ang2)/2;
             /* Find the dubins way points*/
             dubins (prev_goal_x, prev_goal_y, theta_temp,
                     planx1, plany1,ang,
@@ -786,8 +816,14 @@ namespace student {
              /* Connect previous point and next points */
              prev_goal_x = planx1; prev_goal_y = plany1;
         }
-
+        std::cout << "rrt_point_merged_index:" << rrt_point_merged_index << std::endl;
+        for (int i = 0; i<= rrt_point_merged_index; i++)
+        {
+          std::cout << " points: " << rrt_points_merged[i][0]
+          << " " << rrt_points_merged[i][1] << std::endl;
+        }
      }
+
      return true;
  }
 
