@@ -22,8 +22,8 @@
 #define FIND_VICTIM_OCR_DEBUG 0
 #define DEBUG 1
 #define DUBINS_SAMPLING_SIZE 20
-#define DUBINS_K_MAX 18
-#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.08
+#define DUBINS_K_MAX 13
+#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.2
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
@@ -406,7 +406,7 @@ namespace student {
         if (std::isdigit (num_string_confident[0]))
         {
             victim_id = atoi (num_string_confident.c_str());
-            std::cout << "VIctim id detected:" << victim_id <<std::endl;
+            std::cout << "Victim id detected:" << victim_id <<std::endl;
         }
         else
         {
@@ -816,7 +816,10 @@ namespace student {
        prev_goal_y = rrt_points_merged[p][1];
        next_goal_x = rrt_points_merged[p+1][0];
        next_goal_y = rrt_points_merged[p+1][1];
-       // ang = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
+       // next_next_goal_x = rrt_points_merged[p+2][0];
+       // next_next_goal_y = rrt_points_merged[p+2][1];
+       // // ang = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
+       // ang = calctheta (next_goal_x, next_goal_y, next_next_goal_x, next_next_goal_y);
 
       if ((1 == rrt_point_merged_index - p) || 0 == p)
        {
