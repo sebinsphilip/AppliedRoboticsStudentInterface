@@ -23,8 +23,8 @@
 #define DEBUG 1
 #define DUBINS_SAMPLING_SIZE 20
 #define DUBINS_K_MAX 13
-#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.2
-#define MINIMUM_VICTIM_CIRCLE_RADIUS 0.5
+#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.15
+#define MINIMUM_VICTIM_CIRCLE_RADIUS 0.25
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
