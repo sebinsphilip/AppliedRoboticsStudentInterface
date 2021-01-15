@@ -27,7 +27,7 @@
 #include <fstream>
 
 #include "utils.hpp"
-#define DEBUG_RRT 0
+#define DEBUG_RRT 1
 
 
 

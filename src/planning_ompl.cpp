@@ -85,7 +85,7 @@ public:
                 min_dist = dist;
         }
         return min_dist;
-        
+
     }
 };
 
@@ -166,6 +166,7 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
     // Set the bounds of space to be in [0,1].
     //space->setBounds(0.0, 1.0);
     space->setBounds(0.0, std::max(maxx,maxy));
+    //space->setBounds(0.0, 0.5);
 
     // Construct a space information instance for this state space
     auto si(std::make_shared<ob::SpaceInformation>(space));

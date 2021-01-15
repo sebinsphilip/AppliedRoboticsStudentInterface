@@ -24,6 +24,7 @@
 #define DUBINS_SAMPLING_SIZE 20
 #define DUBINS_K_MAX 13
 #define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.2
+#define MINIMUM_VICTIM_CIRCLE_RADIUS 0.5
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
@@ -620,10 +621,12 @@ namespace student {
  bool planPath(const Polygon& borders, const std::vector<Polygon>& obstacle_list,
                 const std::vector<std::pair<int,Polygon>>& victim_list, const Polygon& gate,
                 const float x, const float y, const float theta, Path& path,
-                const std::string& config_folder){
+                const std::string& config_folder)
+                {
 
      float radius, gatex, gatey;
      std::vector<std::pair<int,Polygon>> victim_list_copy = victim_list;
+     std::vector<std::pair<int,Polygon>> victim_list_mission2;
      cv::Point2f circle;
      std::vector<float> radius_list;
      Polygon circle_list;
@@ -650,7 +653,7 @@ namespace student {
      float ang = 0, ang1 = 0, ang2 = 0;
      float theta_intermediate = 0, delta_x =0, delta_y = 0;
      int rrt_point_array_limit = 50, rrt_point_index = 0, rrt_point_merged_index = 0,
-         cur_index = 0, cur_index_skipped = 0;
+         cur_index = 0, cur_index_skipped = 0, victim_present = 0;
 
      float rrt_points[rrt_point_array_limit][2], rrt_points_filtered[rrt_point_array_limit][2],
                 rrt_points_filtered_skipped[rrt_point_array_limit][2],
@@ -668,6 +671,25 @@ namespace student {
          boost::filesystem::create_directory(dir);
      }
 
+     float minx = 100, miny= 100, maxx=-1, maxy=-1;
+     for (int i =0; i< borders.size();i++)
+     {
+         /* Find lower bound of statespace from boarder*/
+         if (minx >= borders[i].x)
+         {
+             minx = borders[i].x;
+             if (miny >= borders[i].y)
+                 miny = borders[i].y;
+         }
+         /* Find higher bound of statespace from boarder*/
+         if (maxx <= borders[i].x)
+         {
+             maxx = borders[i].x;
+             if (maxy <= borders[i].y)
+                 maxy = borders[i].y;
+         }
+     }
+
      /* Find the min-enclosing circle for each obstacle to pass to the RRT module*/
      for (int i=0; i<obstacle_list.size(); ++i)
      {
@@ -680,8 +702,29 @@ namespace student {
          minEnclosingCircle (obstacle_p, circle, radius);
          Point temp(circle.x, circle.y);
          circle_list.push_back(temp);
-         radius_list.push_back(radius);
+         radius_list.push_back(radius + 0.04);
+         std::cout << "radious: " << radius << std::endl;
      }
+     for (float i=0; i<maxx; i+=0.05)
+     {
+       Point temp(i, maxy);
+       Point temp1(i, miny);
+       circle_list.push_back(temp);
+       radius_list.push_back(0.03);
+       circle_list.push_back(temp1);
+       radius_list.push_back(0.03);
+
+     }
+     for (float i=0; i<maxy; i+=0.05)
+     {
+       Point temp(maxx, i);
+       Point temp1(minx, i);
+       circle_list.push_back(temp);
+       radius_list.push_back(0.03);
+       circle_list.push_back(temp1);
+       radius_list.push_back(0.03);
+     }
+
 
 
      /* Find the center x,y coordinates of the gate polygon*/
@@ -695,30 +738,102 @@ namespace student {
      gatex = circle.x; gatey = circle.y;
      /* Push gate valua as final victim */
      gate_point.emplace_back(gatex, gatey);
-     victim_list_copy.push_back({10, gate_point});
-     sort(victim_list_copy.begin(), victim_list_copy.end(), sort_victim);
+     full_path.append("mission_goal.txt");
+     plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders,
+        prev_goal_x,
+        prev_goal_y,
+        circle.x, circle.y, circle_list, radius_list );
+     std::ifstream planFile(full_path);
+     /* clear the array with 0*/
+     for (int k=0; k<rrt_point_array_limit; k++)
+     {
+         rrt_points[k][0] = 0;
+         rrt_points[k][1] = 0;
+     }
+
+    rrt_point_index = 0;
+    /* Read RRT generated path into the array rrt_points[] */
+    while (planFile.peek() != EOF)
+    {
+        planFile >> planx1 >> plany1;
+        if (planx == planx1 && plany == plany1)
+        {
+            /* Reached EOF, break out of loop*/
+            planFile >> planx1 >> plany1;
+            continue;
+        }
+        rrt_points[rrt_point_index][0] = planx1;
+        rrt_points[rrt_point_index++][1] = plany1;
+        planx = planx1; plany = plany1;
+    }
+    planx = plany = 0;
+    planFile.close ();
+
+
+    for (int j=0; j<rrt_point_index; ++j)
+    {
+    for (int i=0; i<victim_list.size(); ++i)
+    {
+
+        std::vector<cv::Point2f> victim_p(victim_list[i].second.size());
+
+
+        /*Find the victim circle x,y coordinates to pass as the goal of RRT path planning */
+        for (int j=0; j<victim_list[i].second.size(); ++j)
+        {
+            victim_p[j].x = ((victim_list[i]).second)[j].x;
+            victim_p[j].y = ((victim_list[i]).second)[j].y;
+        }
+        minEnclosingCircle (victim_p, circle, radius);
+        delta_x = fabs(circle.x -rrt_points[j][0]);
+        delta_y = fabs(circle.y -rrt_points[j][1]);
+        /* dist is the threshold value which determines,if the point is a valid candiate to the path */
+        float dist = sqrt(delta_x*delta_x + delta_y*delta_y) - MINIMUM_VICTIM_CIRCLE_RADIUS;
+        if (dist < 0)
+        {
+          Polygon temp;
+          temp.emplace_back (circle.x, circle.y);
+          victim_present = 0;
+          for (int g =0; g<victim_list_mission2.size(); g++)
+          {
+            if (victim_list[i].first == victim_list_mission2[g].first)
+            {
+              victim_present = 1;
+            }
+          }
+          if (!victim_present)
+          {
+            victim_list_mission2.push_back ({victim_list[i].first, temp});
+            std::cout << "VICTIM : " << victim_list[i].first << std::endl;
+          }
+        }
+      }
+     }
+
+     /* Push gate valua as final victim */
+     victim_list_mission2.push_back({10, gate_point});
+     for (int i=0; i<victim_list_mission2.size(); ++i)
+     {
+       std::cout << "victim_list_mission2: " << victim_list_mission2[i].first
+        << "second " << (victim_list_mission2[i].second)[0].x << std::endl;
+     }
+
+
+
 
      /* Draw the dubins curve based on RRT path for the robot (for each victim pairs)*/
-     for (int i=0; i<victim_list_copy.size(); ++i)
+     for (int i=0; i<victim_list_mission2.size(); ++i)
      {
          full_path = RRT_STAR_FOLDER_PATH;
-         std::vector<cv::Point2f> victim_p(victim_list_copy[i].second.size());
-         full_path.append(std::to_string(victim_list_copy[i].first));
+         full_path.append(std::to_string(victim_list_mission2[i].first));
          full_path.append(".txt");
-
-         /*Find the victim circle x,y coordinates to pass as the goal of RRT path planning */
-         for (int j=0; j<victim_list_copy[i].second.size(); ++j)
-         {
-             victim_p[j].x = ((victim_list_copy[i]).second)[j].x;
-             victim_p[j].y = ((victim_list_copy[i]).second)[j].y;
-         }
-         minEnclosingCircle (victim_p, circle, radius);
 
          /* Plan motion from last victim/start point to next victim (local goal) */
          plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders,
             prev_goal_x,
             prev_goal_y,
-            circle.x, circle.y, circle_list, radius_list );
+            ((victim_list_mission2[i]).second)[0].x,
+            ((victim_list_mission2[i]).second)[0].y, circle_list, radius_list );
          std::ifstream planFile(full_path);
          /* clear the array with 0*/
          for (int k=0; k<rrt_point_array_limit; k++)
@@ -833,7 +948,8 @@ namespace student {
           /* Last calculated destination angle becomes initial angle of new curve*/
           theta_temp = ang;
      }
-     return true;
+
+return true;
  }
 
 }
