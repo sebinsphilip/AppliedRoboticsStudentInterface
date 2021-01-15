@@ -604,7 +604,8 @@ namespace student {
       for (int i = 1; i<= (DUBINS_SAMPLING_SIZE + 1); i++)
       {
           Pose p;
-          float dubins_strip =+ pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
+          float dubins_strip;
+          dubins_strip = pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
           circline(dubins_strip, pth1.points[0].x, pth1.points[0].y, pth1.points[0].kappa, pth1.points[0].theta, p);
           path.points.emplace_back (dubins_strip, p.x, p.y, p.theta,pth1.points[0].kappa);
           theta_intermediate = p.theta;
