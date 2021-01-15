@@ -601,14 +601,18 @@ namespace student {
 
   void drawDubinsCurve (const Path pth1, Path &path, float& theta_intermediate)
   {
-      for (int i = 0; i<= DUBINS_SAMPLING_SIZE; i++)
+      for (int i = 1; i<= (DUBINS_SAMPLING_SIZE + 1); i++)
       {
           Pose p;
-          float dubins_strip = pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
+          float dubins_strip =+ pth1.points[0].s/DUBINS_SAMPLING_SIZE*i;
           circline(dubins_strip, pth1.points[0].x, pth1.points[0].y, pth1.points[0].kappa, pth1.points[0].theta, p);
           path.points.emplace_back (dubins_strip, p.x, p.y, p.theta,pth1.points[0].kappa);
           theta_intermediate = p.theta;
           //std::cout << pth1.points[0].s/100*i << " " << p.x << " " <<  p.y << " " <<  p.theta << " " << pth1.points[0].kappa << std::endl;
+          if (0.0 ==  dubins_strip)
+          {
+          std::cout << "ZEROOOOO" << std::endl;
+        }
       }
 
   }

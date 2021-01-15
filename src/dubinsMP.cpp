@@ -291,5 +291,6 @@ void dubins (float x0, float y0, float th0, float xf, float yf, float thf, int K
         scaleFromStandard(lambda, sc_s1, sc_s2, sc_s3, s1, s2, s3);
         dubinscurve(x0, y0,th0, s1, s2, s3, ksigns[pidx][0]*Kmax, ksigns[pidx] [1]*Kmax, ksigns[pidx][2]*Kmax, pth1, pth2, pth3, Ltotal);
         //assert(check(sc_s1, ksigns(pidx,1)*sc_Kmax, sc_s2, ksigns(pidx,2)*sc_Kmax, sc_s3, ksigns(pidx,3)*sc_Kmax, sc_th0, sc_thf));
+
     }
 }
