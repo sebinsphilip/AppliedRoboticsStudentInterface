@@ -22,8 +22,8 @@
 #define FIND_VICTIM_OCR_DEBUG 0
 #define DEBUG 1
 #define DUBINS_SAMPLING_SIZE 20
-#define DUBINS_K_MAX 17
-#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.07
+#define DUBINS_K_MAX 18
+#define MINIMUM_CURL_FREE_CIRCLE_RADIUS 0.08
 #define RRT_STAR_FOLDER_PATH "/tmp/path/"
 
 // namespace om = ompl::geometric::RRTstar;
@@ -644,8 +644,10 @@ namespace student {
      float prev_goal_y = y;
      float next_goal_x = 0;
      float next_goal_y = 0;
+     float next_next_goal_x = 0;
+     float next_next_goal_y = 0;
      theta_temp = theta;
-     float ang = 0;
+     float ang = 0, ang1 = 0, ang2 = 0;
      float theta_intermediate = 0, delta_x =0, delta_y = 0;
      int rrt_point_array_limit = 50, rrt_point_index = 0, rrt_point_merged_index = 0,
          cur_index = 0, cur_index_skipped = 0;
@@ -713,7 +715,10 @@ namespace student {
          minEnclosingCircle (victim_p, circle, radius);
 
          /* Plan motion from last victim/start point to next victim (local goal) */
-         plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders, prev_goal_x, prev_goal_y, circle.x, circle.y, circle_list, radius_list );
+         plan (1, PLANNER_RRTSTAR, OBJECTIVE_WEIGHTEDCOMBO, full_path, borders,
+            prev_goal_x,
+            prev_goal_y,
+            circle.x, circle.y, circle_list, radius_list );
          std::ifstream planFile(full_path);
          /* clear the array with 0*/
          for (int k=0; k<rrt_point_array_limit; k++)
@@ -792,38 +797,68 @@ namespace student {
           << " " << rrt_points_filtered[i][1] << std::endl;
         }
 
-
-        /* Calculate angle and call dubins function */
-        for (int p=1; p<=cur_index;p++)
-        {
-            planx1 = rrt_points_filtered[p][0];
-            plany1 = rrt_points_filtered[p][1];
-            /* Calculate destination angle for the dubins curve*/
-            ang = calctheta (prev_goal_x, prev_goal_y, planx1, plany1);
-            //ang2 = calctheta (planx1, plany1, next_goal_x, next_goal_y);
-            //ang = (ang1 + ang2)/2;
-            /* Find the dubins way points*/
-            dubins (prev_goal_x, prev_goal_y, theta_temp,
-                    planx1, plany1,ang,
-                    DUBINS_K_MAX, path_enum, pth1, pth2, pth3, curve_lenght);
-            /* draw the dubins curve from way points*/
-            drawDubinsCurve (pth1, path, theta_intermediate);
-            drawDubinsCurve (pth2, path, theta_intermediate);
-            drawDubinsCurve (pth3, path, theta_intermediate);
-
-             /* Last calculated destination angle becomes initial angle of new curve*/
-             theta_temp = ang;
-             /* Connect previous point and next points */
-             prev_goal_x = planx1; prev_goal_y = plany1;
-        }
         std::cout << "rrt_point_merged_index:" << rrt_point_merged_index << std::endl;
         for (int i = 0; i<= rrt_point_merged_index; i++)
         {
           std::cout << " points: " << rrt_points_merged[i][0]
           << " " << rrt_points_merged[i][1] << std::endl;
         }
+        prev_goal_x = rrt_points_merged[rrt_point_merged_index][0];
+        prev_goal_y = rrt_points_merged[rrt_point_merged_index][1];
      }
 
+     /* Calculate angle and call dubins function */
+
+     for (int p = 0; p < rrt_point_merged_index; p++)
+     {
+
+       prev_goal_x = rrt_points_merged[p][0];
+       prev_goal_y = rrt_points_merged[p][1];
+       next_goal_x = rrt_points_merged[p+1][0];
+       next_goal_y = rrt_points_merged[p+1][1];
+       // ang = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
+
+      if ((1 == rrt_point_merged_index - p) || 0 == p)
+       {
+         ang = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
+       }
+       else
+       {
+         next_next_goal_x = rrt_points_merged[p+2][0];
+         next_next_goal_y = rrt_points_merged[p+2][1];
+         /* Calculate destination angle for the dubins curve*/
+         ang1 = calctheta (prev_goal_x, prev_goal_y, next_goal_x, next_goal_y);
+         ang2 = calctheta (next_goal_x, next_goal_y, next_next_goal_x, next_next_goal_y);
+         if (ang2 > (ang1 + M_PI)){
+           ang = std::max(ang1, ang2) + (ang1 + ((2*M_PI) - ang2)/2);
+         }
+         else if (ang1 > (ang2 + M_PI)){
+           ang = std::max(ang1, ang2) + (ang2 + ((2*M_PI) - ang1)/2);
+         }
+         else {
+           ang = std::min(ang1, ang2) + (fabs(ang1 - ang2)/2);
+         }
+
+       }
+
+         std::cout << " ang " << ang << "ang1" << ang1 << " ang2 " << ang2 << std::endl;
+         //ang = (ang1 + ang2)/2;
+         /* Find the dubins way points*/
+         dubins (prev_goal_x, prev_goal_y, theta_temp,
+                 next_goal_x, next_goal_y, ang,
+                 DUBINS_K_MAX, path_enum, pth1, pth2, pth3, curve_lenght);
+         /* draw the dubins curve from way points*/
+         drawDubinsCurve (pth1, path, theta_intermediate);
+         drawDubinsCurve (pth2, path, theta_intermediate);
+         drawDubinsCurve (pth3, path, theta_intermediate);
+
+          /* Last calculated destination angle becomes initial angle of new curve*/
+          theta_temp = ang;
+     }
+     for (int i = 0; i<= path.points.size(); i++)
+     {
+       std::cout << " path.points:[ " << i << "]" << path.points[i].x << " " << path.points[i].y << std::endl;
+     }
      return true;
  }
 
